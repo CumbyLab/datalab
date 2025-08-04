@@ -1,0 +1,74 @@
+name: datalab
+services:
+  app:
+    profiles: ["prod"]
+    build:
+      context: ./
+      dockerfile: .docker/app_dockerfile
+      args:
+        BEHIND_REVERSE_PROXY: ${BEHIND_REVERSE_PROXY:-true}
+    volumes:
+      - ./logs:/logs
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - VUE_APP_GIT_VERSION
+      - VUE_APP_API_URL
+      - VUE_APP_LOGO_URL
+      - VUE_APP_HOMEPAGE_URL
+      - VUE_APP_EDITABLE_INVENTORY
+      - VUE_APP_WEBSITE_TITLE
+      - VUE_APP_QR_CODE_RESOLVER_URL
+      - VUE_APP_AUTOMATICALLY_GENERATE_ID_DEFAULT
+    ports:
+      - "127.0.0.1:8081:8081"
+
+  api:
+    profiles: ["prod"]
+    build:
+      context: ./
+      dockerfile: .docker/server_dockerfile
+      args:
+        WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+        SETUPTOOLS_SCM_PRETEND_VERSION: ${SETUPTOOLS_SCM_PRETEND_VERSION}
+    depends_on:
+      - database
+    restart: unless-stopped
+    volumes:
+      - ./logs:/logs
+      - /data/files:/app/files
+      - /data/backups:/tmp/datalab-backups
+      - ./config.json:/app/config.json
+    ports:
+      - "127.0.0.1:5001:5001"
+    networks:
+      - backend
+    env_file:
+      - .env
+    environment:
+      - PYDATALAB_MONGO_URI=mongodb://database:27017/datalabvue
+      - ORCID_AUTO_ACTIVATE_ACCOUNTS=true
+      - AUTO_ACTIVATE_ACCOUNTS=true
+      - BEHIND_REVERSE_PROXY=true
+      - ORCID_OAUTH_CLIENT_ID=${ORCID_OAUTH_CLIENT_ID}
+      - ORCID_OAUTH_CLIENT_SECRET=${ORCID_OAUTH_CLIENT_SECRET}
+      - OAUTHLIB_INSECURE_TRANSPORT=${OAUTHLIB_INSECURE_TRANSPORT}
+      - ORCID_OAUTH_REDIRECT_URI=${ORCID_OAUTH_REDIRECT_URI}
+      - APP_URL=http://sce-chem-c01894.chem.ed.ac.uk/datalab/
+
+  database:
+    profiles: ["prod"]
+    build:
+      context: ./
+      dockerfile: .docker/mongo_dockerfile
+    volumes:
+      - ./logs:/var/logs/mongod
+      - /data/db:/data/db
+    restart: unless-stopped
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge

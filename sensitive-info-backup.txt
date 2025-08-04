@@ -1,0 +1,18 @@
+# Sensitive Information Backup - Wed Jul 30 02:22:42 PM BST 2025
+# Keep this file secure and never commit to version control
+
+## Email Configuration
+MAIL_PASSWORD=MAIL_PASSWORD=iycmdgkatzlotbhk
+
+## ORCID OAuth
+ORCID_OAUTH_CLIENT_ID=ORCID_OAUTH_CLIENT_ID=APP-2FNHDV3L4HC1NG7Z
+ORCID_OAUTH_CLIENT_SECRET=ORCID_OAUTH_CLIENT_SECRET=4900c93f-6e95-41e7-aff2-13321d9d55c5
+
+## GitHub OAuth  
+GITHUB_OAUTH_CLIENT_ID=GITHUB_OAUTH_CLIENT_ID=Ov23li1sLzUPnvH7Fpue
+GITHUB_OAUTH_CLIENT_SECRET=GITHUB_OAUTH_CLIENT_SECRET=045b0afef969e8b76f4bc8d2c8fb376307c0ec95
+
+## Server URLs
+APP_URL=  "APP_URL": "http://sce-chem-c01894.chem.ed.ac.uk:8081",
+API_URL=  "API_URL": "http://sce-chem-c01894.chem.ed.ac.uk:5001",
+

@@ -1,0 +1,19 @@
+{
+  "APP_URL": "http://sce-chem-c01894.chem.ed.ac.uk/datalab",
+  "API_URL": "http://sce-chem-c01894.chem.ed.ac.uk/datalab/api",
+  "TESTING": false,
+  "BEHIND_REVERSE_PROXY": true,
+  "IDENTIFIER_PREFIX": "mydatalab",
+  "ORCID_AUTO_ACTIVATE_ACCOUNTS": true,
+  "AUTO_ACTIVATE_ACCOUNTS": true,
+  "DEPLOYMENT_METADATA": {
+    "INSTANCE_NAME": "Production Datalab",
+    "CONTACT_EMAIL": "james.cumby@ed.ac.uk",
+    "ORGANIZATION": "Cumby Lab"
+  },
+  "ORCID_OAUTH_CLIENT_ID": "APP-2FNHDV3L4HC1NG7Z",
+  "ORCID_OAUTH_CLIENT_SECRET": "4900c93f-6e95-41e7-aff2-13321d9d55c5",
+  "OAUTHLIB_INSECURE_TRANSPORT": "1",
+  "FORCE_ENABLE_ORCID_OAUTH": true,
+  "ORCID_OAUTH_REDIRECT_URI": "http://sce-chem-c01894.chem.ed.ac.uk/datalab/api/login/orcid/authorized"
+}
