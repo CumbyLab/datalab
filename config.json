@@ -2,6 +2,7 @@
   "APP_URL": "http://sce-chem-c01894.chem.ed.ac.uk/datalab",
   "API_URL": "http://sce-chem-c01894.chem.ed.ac.uk/datalab/api",
   "TESTING": false,
+  "DEBUG": false,
   "BEHIND_REVERSE_PROXY": true,
   "IDENTIFIER_PREFIX": "mydatalab",
   "ORCID_AUTO_ACTIVATE_ACCOUNTS": true,
