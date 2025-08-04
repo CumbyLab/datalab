@@ -1,6 +1,7 @@
 const { ProvidePlugin } = require("webpack");
 
 module.exports = {
+  publicPath: process.env.NODE_ENV === "production" ? "/datalab/" : "/",
   transpileDependencies: ["mermaid"],
   configureWebpack: (config) => {
     config.resolve.fallback = {
