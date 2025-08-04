@@ -74,3 +74,5 @@ venv/
 ENV/
 .matplotlibrc
 matplotlibrc
+docker-compose.prod.yml
+config.json
