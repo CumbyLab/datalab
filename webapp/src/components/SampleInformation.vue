@@ -26,7 +26,7 @@
           <div class="form-group col-md-3 col-sm-2 col-6">
             <label for="samp-refcode">Refcode</label>
             <div id="samp-refcode">
-              <FormattedRefcode :refcode="Refcode" />
+              <FormattedRefcode :refcode="Refcode" :name="Name" :chemform="ChemForm" />
             </div>
           </div>
           <div class="form-group col-md-3 col-sm-3 col-6 pb-3">

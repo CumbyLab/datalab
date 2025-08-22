@@ -1,10 +1,11 @@
 <template>
   <div class="text-center">
+    <div class="qrcode-image">
     <QRCodeVue3
       :value="QRCodeUrl"
       :width="width"
       :height="width"
-      :qr-options="{ typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'H' }"
+      :qr-options="{ typeNumber: 2, mode: 'Byte', errorCorrectionLevel: 'H' }"
       :image-options="{ hideBackgroundDots: false, imageSize: 0, margin: 0 }"
       :dots-options="{
         type: 'square',
@@ -14,7 +15,9 @@
       :corners-square-options="{ type: 'square', color: 'black' }"
       :corners-dot-options="{ type: 'square', color: 'black' }"
       file-ext="png"
+      class="test"
     />
+    </div>
     <div
       id="qrcode-text-label"
       :style="{ width: width }"
@@ -23,6 +26,7 @@
       {{ refcode }}
     </div>
   </div>
+  <!--
   <div v-if="!federatedQR" class="alert alert-info">
     QR_CODE_RESOLVER_URL is not set to the federation resolver URL for this deployment.<br />
     Links embedded within QR codes generated here will only work if this <i>datalab</i> instance
@@ -31,6 +35,7 @@
     Visit <a :href="federationQRCodeUrl">{{ federationQRCodeUrl }}</a> to learn about persistent URL
     resolution in <i>datalab</i>.
   </div>
+  -->
 </template>
 
 <script>
@@ -65,7 +70,8 @@ export default {
       // If the QR_CODE_RESOLVER_URL is not set, use the API_URL
       // with the redirect-to-ui option
       if (QR_CODE_RESOLVER_URL == null) {
-        return API_URL + "/items/" + this.refcode + "?redirect-to-ui=true";
+        // return API_URL + "/items/" + this.refcode + "?redirect-to-ui=true";
+        return this.refcode;
       }
       return QR_CODE_RESOLVER_URL + "/" + this.refcode;
     },
