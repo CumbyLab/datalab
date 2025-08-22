@@ -217,6 +217,9 @@ export default {
     box-sizing: border-box !important;
   }
   .label-print-media.qrcode-modal-flex-row {
+    display: grid !important;
+    grid-template-columns: 20mm 44mm;
+    grid-template-rows: 18mm;
     width: 64mm !important;
     max-width: 64mm !important;
     min-width: 64mm !important;
@@ -226,28 +229,29 @@ export default {
     margin: 3mm !important;
     padding: 0 !important;
     box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: row !important;
-  }
-  .label-print-media .qrcode-modal-left,
-  .label-print-media .qrcode-modal-right {
-    height: 18mm !important;
-    max-height: 18mm !important;
-    min-height: 0 !important;
-    box-sizing: border-box !important;
   }
   .label-print-media .qrcode-modal-left {
-    width: 18mm !important;
-    flex: 0 0 18mm !important;
+    width: 20mm !important;
     min-width: 0 !important;
-    max-width: 24mm !important;
+    max-width: 20mm !important;
+    height: 18mm !important;
+    max-height: 18mm !important;
+    min-height: 18mm !important;
+    box-sizing: border-box !important;
+    grid-column: 1;
+    grid-row: 1;
   }
   .label-print-media .qrcode-modal-right {
-    flex: 1 1 0 !important;
+    width: 44mm !important;
     min-width: 0 !important;
     max-width: 44mm !important;
-    width: 44mm !important;
+    height: 18mm !important;
+    max-height: 18mm !important;
+    min-height: 18mm !important;
     box-sizing: border-box !important;
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0 !important; /* Align with grid column */
   }
   .label-print-media .qrcode-sample-name-label,
   .label-print-media .qrcode-sample-chemform-label {
