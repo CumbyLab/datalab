@@ -97,7 +97,7 @@ export default {
       function closePrintWindow() {
         if (!printHandled) {
           printHandled = true;
-          // printWindow.close();
+          printWindow.close();
         }
       }
       printWindow.addEventListener('afterprint', closePrintWindow);
@@ -198,56 +198,60 @@ export default {
 @media print {
   @page {
     size: 70mm 24mm;
-    margin: 0;
+    padding: 0mm;
   }
   html, body {
-    width: 70mm !important;
-    max-width: 70mm !important;
-    min-width: 70mm !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     box-sizing: border-box !important;
   }
   .label-print-media {
-    width: 70mm !important;
-    max-width: 70mm !important;
-    min-width: 70mm !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     box-sizing: border-box !important;
   }
   .label-print-media.qrcode-modal-flex-row {
     display: grid !important;
-    grid-template-columns: 20mm 44mm;
-    grid-template-rows: 18mm;
-    width: 64mm !important;
-    max-width: 64mm !important;
-    min-width: 64mm !important;
-    height: 18mm !important;
-    max-height: 18mm !important;
-    min-height: 18mm !important;
-    margin: 3mm !important;
+    grid-template-columns: 30% 70%;
+    grid-template-rows: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 100% !important;
     padding: 0 !important;
     box-sizing: border-box !important;
   }
   .label-print-media .qrcode-modal-left {
-    width: 20mm !important;
+    width: 100% !important;
     min-width: 0 !important;
-    max-width: 20mm !important;
-    height: 18mm !important;
-    max-height: 18mm !important;
-    min-height: 18mm !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 100% !important;
     box-sizing: border-box !important;
     grid-column: 1;
     grid-row: 1;
+    justify-content: right center;
   }
   .label-print-media .qrcode-modal-right {
-    width: 44mm !important;
+    width: 100% !important;
     min-width: 0 !important;
-    max-width: 44mm !important;
-    height: 18mm !important;
-    max-height: 18mm !important;
-    min-height: 18mm !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
     box-sizing: border-box !important;
     grid-column: 2;
     grid-row: 1;
@@ -272,55 +276,43 @@ export default {
     min-height: 0 !important;
     box-sizing: border-box !important;
   }
+  /* Size of the QR image */
   .label-print-media .qrcode-image img {
     transform: scale(1.0) !important; /* Adjust this value if you need to shrink/grow */
-    transform-origin: center center !important;
-    width: 10mm !important;
-    height: 10mm !important;
+    transform-origin: left center !important;
+    width: min(60vh, 100%) !important;
+    height: 60vh !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     position: relative !important;
   }
-
-  .label-print-media .qrcode-image {
-    width: 10mm !important;
-    height: 10mm !important;
-    min-width: 10mm !important;
-    min-height: 10mm !important;
-    max-width: 10mm !important;
-    max-height: 10mm !important;
-    box-sizing: border-box !important;
-    overflow: hidden !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
   .label-print-media .qrcode-image > svg,
   .label-print-media .qrcode-image > img {
-    width: 10mm !important;
-    height: 10mm !important;
-    min-width: 10mm !important;
-    min-height: 10mm !important;
-    max-width: 10mm !important;
-    max-height: 10mm !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
     box-sizing: border-box !important;
     display: block !important;
     padding: 0 !important;
     margin: 0 !important;
   }
   .label-print-media .qrcode-text-label {
-    font-size: 2.5mm !important;
+    min-width: 2mm !important;
+    min-height: 2mm !important;
+    font-size: clamp(2mm, 8vh, 10mm) !important;
+    font-weight: 400
   }
   .label-print-media .qrcode-sample-name-label {
-    font-size: 4mm !important;
+    font-size: clamp(2mm, 15vh, 8mm) !important;
     font-weight: 800;
   }
   .label-print-media .qrcode-sample-chemform-label {
-    font-size: 3mm !important;
+    font-size: clamp(2mm, 10vh, 6mm) !important;
     font-family: monospace;
   }
-}
+  }
 </style>
