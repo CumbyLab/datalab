@@ -283,6 +283,34 @@ export default {
     position: relative !important;
   }
 
+  .label-print-media .qrcode-image {
+    width: 10mm !important;
+    height: 10mm !important;
+    min-width: 10mm !important;
+    min-height: 10mm !important;
+    max-width: 10mm !important;
+    max-height: 10mm !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .label-print-media .qrcode-image > svg,
+  .label-print-media .qrcode-image > img {
+    width: 10mm !important;
+    height: 10mm !important;
+    min-width: 10mm !important;
+    min-height: 10mm !important;
+    max-width: 10mm !important;
+    max-height: 10mm !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
   .label-print-media .qrcode-text-label {
     font-size: 2.5mm !important;
   }
