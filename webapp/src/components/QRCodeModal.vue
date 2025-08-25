@@ -77,17 +77,140 @@ export default {
       const chemform = this.chemform || '';
       // Create print window
       const printWindow = window.open("", "", "height=480, width=1400");
-      // Build DOM using DOM methods
       const doc = printWindow.document;
+      // Build DOM using DOM methods
       const html = doc.createElement('html');
       const head = doc.createElement('head');
       const title = doc.createElement('title');
       title.textContent = 'QR Code';
       head.appendChild(title);
-      // Copy all <style> and <link rel="stylesheet"> from current document
-      document.querySelectorAll('style,link[rel="stylesheet"]').forEach(node => {
-        head.appendChild(node.cloneNode(true));
-      });
+
+      // Inject print CSS directly for maximum reliability
+      const printStyle = doc.createElement('style');
+      printStyle.type = 'text/css';
+      printStyle.textContent = `
+@media print {
+  @page {
+    size: 70mm 24mm;
+    padding: 0mm;
+  }
+  html, body {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .label-print-media {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .label-print-media.qrcode-modal-flex-row {
+    display: grid !important;
+    grid-template-columns: 30% 70%;
+    grid-template-rows: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 100% !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .label-print-media .qrcode-modal-left {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 100% !important;
+    box-sizing: border-box !important;
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: right center;
+  }
+  .label-print-media .qrcode-modal-right {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0 !important;
+  }
+  .label-print-media .qrcode-sample-name-label,
+  .label-print-media .qrcode-sample-chemform-label {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    text-align: left !important;
+    text-overflow: ellipsis !important;
+    white-space: normal !important;
+  }
+  .label-print-media .qrcode-image,
+  .label-print-media .qrcode-text-label,
+  .label-print-media .qrcode-sample-name-label,
+  .label-print-media .qrcode-sample-chemform-label {
+    max-height: 100% !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .label-print-media .qrcode-image img {
+    transform: scale(1.0) !important;
+    transform-origin: left center !important;
+    width: min(60vh, 100%) !important;
+    height: 60vh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+  }
+  .label-print-media .qrcode-image > svg,
+  .label-print-media .qrcode-image > img {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .label-print-media .qrcode-text-label {
+    min-width: 2mm !important;
+    min-height: 2mm !important;
+    font-size: clamp(2mm, 8vh, 10mm) !important;
+    font-weight: 400;
+  }
+  .label-print-media .qrcode-sample-name-label {
+    font-size: 18vh;
+    font-weight: 800;
+  }
+  .label-print-media .qrcode-sample-chemform-label {
+    font-size: 12vh !important;
+    font-family: monospace;
+  }
+}
+      `;
+      head.appendChild(printStyle);
+
       html.appendChild(head);
       const body = doc.createElement('body');
       // Build label content
