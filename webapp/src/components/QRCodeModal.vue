@@ -97,7 +97,7 @@ export default {
       function closePrintWindow() {
         if (!printHandled) {
           printHandled = true;
-          printWindow.close();
+          // printWindow.close();
         }
       }
       printWindow.addEventListener('afterprint', closePrintWindow);
