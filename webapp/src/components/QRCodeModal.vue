@@ -75,23 +75,44 @@ export default {
       const qrHtml = this.$refs.qrcode.innerHTML;
       const name = this.name || '';
       const chemform = this.chemform || '';
-      const html = `
-        <div class="label-print-media qrcode-modal-flex-row">
-          <div class="qrcode-modal-left">
-            ${qrHtml}
-          </div>
-          <div class="qrcode-modal-right">
-            <div class="qrcode-sample-name-label">${name}</div>
-            <div class="qrcode-sample-chemform-label">${chemform}</div>
-          </div>
-        </div>
-      `;
+      // Create print window
       const printWindow = window.open("", "", "height=480, width=1400");
-      printWindow.document.write(`<html><head><title>QR Code</title><link rel='stylesheet' href='' /></head><body>${html}</body></html>`);
-      // Copy styles from the current document's <style> and <link rel="stylesheet"> tags
-      const head = document.head.cloneNode(true);
-      printWindow.document.head.innerHTML = head.innerHTML;
-      printWindow.document.close();
+      // Build DOM using DOM methods
+      const doc = printWindow.document;
+      const html = doc.createElement('html');
+      const head = doc.createElement('head');
+      const title = doc.createElement('title');
+      title.textContent = 'QR Code';
+      head.appendChild(title);
+      // Copy all <style> and <link rel="stylesheet"> from current document
+      document.querySelectorAll('style,link[rel="stylesheet"]').forEach(node => {
+        head.appendChild(node.cloneNode(true));
+      });
+      html.appendChild(head);
+      const body = doc.createElement('body');
+      // Build label content
+      const wrapper = doc.createElement('div');
+      wrapper.className = 'label-print-media qrcode-modal-flex-row';
+      // Left (QR)
+      const left = doc.createElement('div');
+      left.className = 'qrcode-modal-left';
+      left.innerHTML = qrHtml;
+      // Right (labels)
+      const right = doc.createElement('div');
+      right.className = 'qrcode-modal-right';
+      const nameDiv = doc.createElement('div');
+      nameDiv.className = 'qrcode-sample-name-label';
+      nameDiv.textContent = name;
+      const chemDiv = doc.createElement('div');
+      chemDiv.className = 'qrcode-sample-chemform-label';
+      chemDiv.textContent = chemform;
+      right.appendChild(nameDiv);
+      right.appendChild(chemDiv);
+      wrapper.appendChild(left);
+      wrapper.appendChild(right);
+      body.appendChild(wrapper);
+      html.appendChild(body);
+      doc.replaceChild(html, doc.documentElement);
       // Add events to close window after print or cancel
       let printHandled = false;
       function closePrintWindow() {
@@ -307,11 +328,11 @@ export default {
     font-weight: 400
   }
   .label-print-media .qrcode-sample-name-label {
-    font-size: clamp(2mm, 15vh, 8mm) !important;
+    font-size: 18vh; /* clamp(2mm, 25vh, 8mm) !important; */
     font-weight: 800;
   }
   .label-print-media .qrcode-sample-chemform-label {
-    font-size: clamp(2mm, 10vh, 6mm) !important;
+    font-size: 12vh !important; /*clamp(2mm, 10vh, 6mm) !important;*/
     font-family: monospace;
   }
   }
