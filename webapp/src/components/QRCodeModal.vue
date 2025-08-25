@@ -92,7 +92,7 @@ export default {
 @media print {
   @page {
     size: 70mm 24mm;
-    padding: 0mm;
+    padding: 3mm;
   }
   html, body {
     width: 100% !important;
@@ -137,7 +137,6 @@ export default {
     box-sizing: border-box !important;
     grid-column: 1;
     grid-row: 1;
-    justify-content: right center;
   }
   .label-print-media .qrcode-modal-right {
     width: 100% !important;
@@ -150,6 +149,7 @@ export default {
     grid-column: 2;
     grid-row: 1;
     margin-left: 0 !important;
+    align-items: center;
   }
   .label-print-media .qrcode-sample-name-label,
   .label-print-media .qrcode-sample-chemform-label {
@@ -173,8 +173,8 @@ export default {
   .label-print-media .qrcode-image img {
     transform: scale(1.0) !important;
     transform-origin: left center !important;
-    width: min(60vh, 100%) !important;
-    height: 60vh !important;
+    width: min(70vh, 70vw) !important;
+    height: min(70vh, 70vw) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -194,17 +194,15 @@ export default {
     margin: 0 !important;
   }
   .label-print-media .qrcode-text-label {
-    min-width: 2mm !important;
-    min-height: 2mm !important;
-    font-size: clamp(2mm, 8vh, 10mm) !important;
+    font-size: 14vh !important;
     font-weight: 400;
   }
   .label-print-media .qrcode-sample-name-label {
-    font-size: 18vh;
+    font-size: 24vh;
     font-weight: 800;
   }
   .label-print-media .qrcode-sample-chemform-label {
-    font-size: 12vh !important;
+    font-size: 18vh !important;
     font-family: monospace;
   }
 }
