@@ -73,7 +73,8 @@ export default {
         // return API_URL + "/items/" + this.refcode + "?redirect-to-ui=true";
         return this.refcode;
       }
-      return QR_CODE_RESOLVER_URL + "/" + this.refcode;
+      //return QR_CODE_RESOLVER_URL + "/" + this.refcode;
+      return this.refcode;
     },
   },
 };
@@ -83,5 +84,9 @@ export default {
 .qrcode-text-label {
   font-family: var(--font-monospace);
   font-size: 1.8rem;
+}
+.qrcode-image {
+  /* For some reason the QR code is rendered flipped horizontally */
+  transform: scale(-1.0, 1.0);
 }
 </style>

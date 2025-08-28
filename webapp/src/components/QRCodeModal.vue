@@ -171,8 +171,7 @@ export default {
     box-sizing: border-box !important;
   }
   .label-print-media .qrcode-image img {
-    transform: scale(1.0) !important;
-    transform-origin: left center !important;
+    transform: scale(-1.0, 1.0);
     width: min(70vh, 70vw) !important;
     height: min(70vh, 70vw) !important;
     display: flex !important;
@@ -420,8 +419,7 @@ export default {
   }
   /* Size of the QR image */
   .label-print-media .qrcode-image img {
-    transform: scale(1.0) !important; /* Adjust this value if you need to shrink/grow */
-    transform-origin: left center !important;
+    transform: scale(-1.0, 1.0);
     width: min(60vh, 100%) !important;
     height: 60vh !important;
     display: flex !important;
