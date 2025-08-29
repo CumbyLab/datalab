@@ -172,8 +172,8 @@ export default {
   }
   .label-print-media .qrcode-image img {
     transform: scale(-1.0, 1.0);
-    width: min(70vh, 70vw) !important;
-    height: min(70vh, 70vw) !important;
+    width: min(80vh, 80vw) !important;
+    height: min(80vh, 80vw) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
