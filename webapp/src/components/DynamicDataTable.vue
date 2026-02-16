@@ -54,6 +54,7 @@
           @open-create-collection-modal="createCollectionModalIsOpen = true"
           @open-create-equipment-modal="createEquipmentModalIsOpen = true"
           @open-add-to-collection-modal="addToCollectionModalIsOpen = true"
+          @open-batch-share-modal="batchShareModalIsOpen = true"
           @delete-selected-items="deleteSelectedItems"
           @remove-selected-items-from-collection="removeSelectedItemsFromCollection"
           @reset-table="handleResetTable"
@@ -74,7 +75,12 @@
       </template>
       <template #empty> No entries found. </template>
 
-      <Column v-if="showButtons" class="checkbox" selection-mode="multiple"></Column>
+      <Column
+        v-if="showButtons"
+        class="checkbox"
+        selection-mode="multiple"
+        :style="{ minWidth: '3.5ch' }"
+      ></Column>
 
       <!-- <Column expander style="width: 5rem" /> -->
       <Column
@@ -83,7 +89,12 @@
         :field="column.field"
         sortable
         :class="{ 'filter-active': isFilterActive(column.field) }"
-        :filter-menu-class="column.field === 'type' ? 'no-operator' : ''"
+        :style="{ minWidth: getColumnMinWidth(column) }"
+        :filter-menu-class="
+          column.field === 'type' || column.field === 'status' || column.field === 'date'
+            ? 'no-operator'
+            : ''
+        "
       >
         <template #header>
           <div v-if="column.icon" class="header-with-icon">
@@ -104,10 +115,10 @@
         <template v-else #body="slotProps">
           {{ slotProps.data[column.field] }}
         </template>
-        <template v-if="column.filter && column.field === 'creators'" #filter>
+        <template v-if="column.filter && column.field === 'creatorsAndGroups'" #filter>
           <MultiSelect
             v-model="filters[column.field].constraints[0].value"
-            :options="uniqueCreators"
+            :options="uniqueCreatorsAndGroups"
             option-label="display_name"
             placeholder="Any"
             class="d-flex w-full"
@@ -116,8 +127,19 @@
           >
             <template #option="slotProps">
               <div class="flex items-center">
-                <UserBubble :creator="slotProps.option" :size="24" />
-                <span class="ml-1">{{ slotProps.option.display_name }}</span>
+                <UserBubble
+                  v-if="slotProps.option.type === 'creator'"
+                  :creator="slotProps.option"
+                  :size="24"
+                />
+                <FormattedGroupName
+                  v-if="slotProps.option.type === 'group'"
+                  :group="slotProps.option"
+                  :size="24"
+                />
+                <span v-if="slotProps.option.type === 'creator'" class="ml-1">{{
+                  slotProps.option.display_name
+                }}</span>
               </div>
             </template>
             <template #value="slotProps">
@@ -128,7 +150,11 @@
                     :key="index"
                     class="inline-flex items-center mr-2"
                   >
-                    <UserBubble :creator="option" :size="20" />
+                    <UserBubble v-if="option.type === 'creator'" :creator="option" :size="20" />
+                    <FormattedGroupName v-if="option.type === 'group'" :group="option" :size="20" />
+                    <span v-if="option.type === 'creator'" class="ml-1">{{
+                      option.display_name
+                    }}</span>
                   </span>
                 </template>
                 <span v-else class="text-gray-400">Any</span>
@@ -171,6 +197,7 @@
             </template>
           </MultiSelect>
         </template>
+
         <template v-else-if="column.filter && column.field === 'type'" #filter="">
           <MultiSelect
             v-model="filters[column.field].constraints[0].value"
@@ -183,6 +210,7 @@
           >
           </MultiSelect>
         </template>
+
         <template v-else-if="column.filter && column.body === 'BlocksIconCounter'" #filter>
           <MultiSelect
             v-model="filters[column.field].constraints[0].value"
@@ -214,6 +242,75 @@
             </template>
           </MultiSelect>
         </template>
+
+        <template v-else-if="column.filter && column.field === 'status'" #filter="">
+          <MultiSelect
+            v-model="filters[column.field].constraints[0].value"
+            :options="uniqueStatus"
+            option-label="status"
+            placeholder="Select status"
+            class="d-flex w-full"
+            :filter="true"
+            @click.stop
+          >
+            <template #option="slotProps">
+              <div class="flex items-center">
+                <FormattedItemStatus :status="slotProps.option.status" :dot-only="false" />
+              </div>
+            </template>
+            <template #value="slotProps">
+              <div class="flex flex-wrap gap-2 items-center">
+                <template v-if="slotProps.value && slotProps.value.length">
+                  <span
+                    v-for="(option, index) in slotProps.value"
+                    :key="index"
+                    class="inline-flex items-center mr-2"
+                  >
+                    <FormattedItemStatus :status="option.status" :dot-only="false" />
+                  </span>
+                </template>
+                <span v-else class="text-gray-400">Any</span>
+              </div>
+            </template>
+          </MultiSelect>
+        </template>
+
+        <template v-else-if="column.filter && column.field === 'date'" #filter="{ filterModel }">
+          <div style="display: flex; flex-direction: column; gap: 0.5rem" @click.stop>
+            <Select
+              v-model="dateFilterMode"
+              :options="dateFilterOptions"
+              option-label="label"
+              option-value="value"
+              placeholder="Select filter type"
+              class="w-full"
+              @change="handleDateFilterModeChange(column.field)"
+            />
+
+            <DatePicker
+              v-if="dateFilterMode === 'range'"
+              v-model="filterModel.value"
+              selection-mode="range"
+              date-format="yy-mm-dd"
+              placeholder="Select date range"
+              :show-button-bar="true"
+              :manual-input="false"
+              :hide-on-range-selection="true"
+              style="width: 100%"
+            />
+
+            <DatePicker
+              v-else
+              v-model="filterModel.value"
+              date-format="yy-mm-dd"
+              :placeholder="dateFilterMode === 'before' ? 'Before date' : 'After date'"
+              :show-button-bar="true"
+              :manual-input="false"
+              style="width: 100%"
+            />
+          </div>
+        </template>
+
         <template v-else-if="column.filter" #filter="{ filterModel }">
           <InputText
             v-model="filterModel.value"
@@ -243,6 +340,11 @@
     :items-selected="itemsSelected"
     @items-updated="handleItemsUpdated"
   />
+  <BatchShareModal
+    v-model="batchShareModalIsOpen"
+    :items-selected="itemsSelected"
+    @items-updated="handleItemsUpdated"
+  />
 </template>
 
 <script>
@@ -253,6 +355,7 @@ import QRScannerModal from "@/components/QRScannerModal";
 import CreateCollectionModal from "@/components/CreateCollectionModal";
 import CreateEquipmentModal from "@/components/CreateEquipmentModal";
 import AddToCollectionModal from "@/components/AddToCollectionModal";
+import BatchShareModal from "@/components/BatchShareModal";
 
 import { INVENTORY_TABLE_TYPES, EDITABLE_INVENTORY } from "@/resources.js";
 
@@ -264,14 +367,19 @@ import ChemicalFormula from "@/components/ChemicalFormula";
 import CollectionList from "@/components/CollectionList";
 import Creators from "@/components/Creators";
 import UserBubble from "@/components/UserBubble.vue";
+import FormattedItemStatus from "@/components/FormattedItemStatus.vue";
 import FormattedBarcode from "@/components/FormattedBarcode.vue";
 import FormattedRefcode from "@/components/FormattedRefcode.vue";
+import FormattedGroupName from "./FormattedGroupName.vue";
+import GroupsIconCounter from "@/components/GroupsIconCounter";
 
 import { FilterMatchMode, FilterOperator, FilterService } from "@primevue/core/api";
 import DataTable from "primevue/datatable";
 import MultiSelect from "primevue/multiselect";
 import Column from "primevue/column";
 import InputText from "primevue/inputtext";
+import DatePicker from "primevue/datepicker";
+import Select from "primevue/select";
 
 export default {
   components: {
@@ -286,16 +394,22 @@ export default {
     CreateCollectionModal,
     CreateEquipmentModal,
     AddToCollectionModal,
+    BatchShareModal,
     DataTable,
     MultiSelect,
     Column,
     InputText,
     FormattedItemName,
     FormattedCollectionName,
+    FormattedItemStatus,
+    FormattedGroupName,
     ChemicalFormula,
     CollectionList,
     Creators,
     UserBubble,
+    GroupsIconCounter,
+    DatePicker,
+    Select,
   },
   props: {
     columns: {
@@ -339,6 +453,7 @@ export default {
       createCollectionModalIsOpen: false,
       createEquipmentModalIsOpen: false,
       addToCollectionModalIsOpen: false,
+      batchShareModalIsOpen: false,
       isSampleFetchError: false,
       itemsSelected: [],
       allSelected: false,
@@ -348,6 +463,7 @@ export default {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }],
         },
+
         collection_id: {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: FilterMatchMode.CONTAINS }],
@@ -368,22 +484,44 @@ export default {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: "exactCreatorMatch" }],
         },
+        creatorsAndGroups: {
+          operator: FilterOperator.AND,
+          constraints: [{ value: null, matchMode: "exactCreatorAndGroupMatch" }],
+        },
         blocks: {
           operator: FilterOperator.AND,
           constraints: [{ value: null, matchMode: "exactBlockMatch" }],
+        },
+        status: {
+          operator: FilterOperator.OR,
+          constraints: [{ value: null, matchMode: "exactStatusMatch" }],
+        },
+        date: {
+          operator: FilterOperator.AND,
+          constraints: [{ value: null, matchMode: "dateRange" }],
         },
       },
       filteredData: [],
       allowedTypes: INVENTORY_TABLE_TYPES,
       selectedColumns: [],
+      dateFilterMode: "range",
+      dateFilterOptions: [
+        { label: "Date range", value: "range" },
+        { label: "Created before", value: "before" },
+        { label: "Created after", value: "after" },
+      ],
     };
   },
+
   computed: {
     rows() {
       return this.$store.state.datatablePaginationSettings[this.dataType].rows;
     },
     page() {
       return this.$store.state.datatablePaginationSettings[this.dataType].page;
+    },
+    adminSuperUserMode() {
+      return this.$store.getters.isAdminSuperUserModeActive;
     },
     uniqueCreators() {
       return Array.from(
@@ -393,6 +531,35 @@ export default {
             .map((creator) => [JSON.stringify(creator), creator]),
         ).values(),
       );
+    },
+    uniqueGroups() {
+      if (!this.data) return [];
+      const allGroups = this.data.flatMap((item) => item.groups || []);
+      const uniqueGroupsMap = new Map();
+      allGroups.forEach((group) => {
+        if (group && group.group_id) {
+          uniqueGroupsMap.set(group.group_id, { ...group });
+        }
+      });
+      return Array.from(uniqueGroupsMap.values());
+    },
+    uniqueCreatorsAndGroups() {
+      const hasVirtualField = this.data && this.data[0] && this.data[0].creatorsAndGroups;
+
+      if (hasVirtualField) {
+        const allItems = this.data.flatMap((item) => item.creatorsAndGroups || []);
+        const uniqueMap = new Map();
+        allItems.forEach((item) => {
+          const key = `${item.type}-${item.display_name}`;
+          if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, { ...item });
+          }
+        });
+        return Array.from(uniqueMap.values());
+      } else {
+        const creators = this.uniqueCreators.map((c) => ({ ...c, type: "creator" }));
+        return creators;
+      }
     },
     uniqueCollections() {
       return Array.from(
@@ -416,6 +583,11 @@ export default {
 
       return Array.from(blockTypesMap.values());
     },
+    uniqueStatus() {
+      return Array.from(
+        new Set(this.data.filter((item) => item.status).map((item) => item.status)),
+      ).map((status) => ({ status }));
+    },
     knownTypes() {
       // Grab the set of types stored under the item type key
       return Array.from(new Set(this.data.map((item) => item.type))).map((type) => ({ type }));
@@ -437,6 +609,14 @@ export default {
     },
   },
   created() {
+    this.$store.commit("setPage", { type: this.dataType, page: 0 });
+
+    const savedState = localStorage.getItem(`datatable-state-${this.dataType}`);
+    if (savedState) {
+      const parsed = JSON.parse(savedState);
+      parsed.first = 0;
+      localStorage.setItem(`datatable-state-${this.dataType}`, JSON.stringify(parsed));
+    }
     this.editable_inventory = EDITABLE_INVENTORY;
     this.selectedColumns = this.availableColumns.filter((col) => !col.hidden);
 
@@ -466,19 +646,65 @@ export default {
       const filter = this.filters.creators;
       const isAnd = filter.operator === FilterOperator.AND;
 
+      const currentItem = this.data.find((item) => {
+        if (item.creatorsAndGroups) {
+          return JSON.stringify(item.creators) === JSON.stringify(value);
+        } else {
+          return JSON.stringify(item.creators) === JSON.stringify(value);
+        }
+      });
+
+      if (!currentItem) return false;
+
+      const itemsToFilter =
+        currentItem.creatorsAndGroups ||
+        (currentItem.creators || []).map((c) => ({ ...c, type: "creator" }));
+
       if (Array.isArray(filterValue)) {
         if (isAnd) {
-          return filterValue.every((filterCreator) =>
-            value.some((itemCreator) => itemCreator.display_name === filterCreator.display_name),
+          return filterValue.every((filter) =>
+            itemsToFilter.some(
+              (item) => item.display_name === filter.display_name && item.type === filter.type,
+            ),
           );
         } else {
-          return filterValue.some((filterCreator) =>
-            value.some((itemCreator) => itemCreator.display_name === filterCreator.display_name),
+          return filterValue.some((filter) =>
+            itemsToFilter.some(
+              (item) => item.display_name === filter.display_name && item.type === filter.type,
+            ),
           );
         }
       }
 
-      return value.some((itemCreator) => itemCreator.display_name === filterValue.display_name);
+      return itemsToFilter.some(
+        (item) => item.display_name === filterValue.display_name && item.type === filterValue.type,
+      );
+    });
+    FilterService.register("exactCreatorAndGroupMatch", (value, filterValue) => {
+      if (!filterValue || !value) return true;
+
+      const filter = this.filters.creatorsAndGroups;
+      const isAnd = filter.operator === FilterOperator.AND;
+
+      if (Array.isArray(filterValue)) {
+        if (isAnd) {
+          return filterValue.every((filter) =>
+            value.some(
+              (item) => item.display_name === filter.display_name && item.type === filter.type,
+            ),
+          );
+        } else {
+          return filterValue.some((filter) =>
+            value.some(
+              (item) => item.display_name === filter.display_name && item.type === filter.type,
+            ),
+          );
+        }
+      }
+
+      return value.some(
+        (item) => item.display_name === filterValue.display_name && item.type === filterValue.type,
+      );
     });
     FilterService.register("exactTypeMatch", (value, filterValue) => {
       if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) {
@@ -534,8 +760,69 @@ export default {
 
       return value.some((itemBlock) => itemBlock.title === filterValue.title);
     });
+
+    FilterService.register("exactStatusMatch", (value, filterValue) => {
+      if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) {
+        return true;
+      }
+
+      if (Array.isArray(filterValue)) {
+        return filterValue.some((f) => f.status === value);
+      }
+
+      return filterValue.status === value;
+    });
+
+    FilterService.register("dateBefore", (value, filterValue) => {
+      if (!filterValue || !value) return true;
+      const itemDate = new Date(value).setHours(0, 0, 0, 0);
+      const filterDate = new Date(filterValue).setHours(0, 0, 0, 0);
+      return itemDate <= filterDate;
+    });
+
+    FilterService.register("dateAfter", (value, filterValue) => {
+      if (!filterValue || !value) return true;
+      const itemDate = new Date(value).setHours(0, 0, 0, 0);
+      const filterDate = new Date(filterValue).setHours(0, 0, 0, 0);
+      return itemDate >= filterDate;
+    });
+
+    FilterService.register("dateRange", (value, filterValue) => {
+      if (!filterValue || !value || !Array.isArray(filterValue) || filterValue.length !== 2)
+        return true;
+      const itemDate = new Date(value).setHours(0, 0, 0, 0);
+      const startDate = new Date(filterValue[0]).setHours(0, 0, 0, 0);
+      const endDate = new Date(filterValue[1]).setHours(0, 0, 0, 0);
+      return itemDate >= startDate && itemDate <= endDate;
+    });
   },
   methods: {
+    getColumnMinWidth(column) {
+      const COLUMN_BASE_PADDING = 2.5;
+      const CHAR_WIDTH_ESTIMATE = 0.75;
+      const SORT_ICON_SPACE = 2.5;
+      const FILTER_BUTTON_WIDTH = 3.5;
+      const HEADER_ICON_SPACE = 2.5;
+      const MIN_COLUMN_WIDTH = 10;
+
+      let minWidth = COLUMN_BASE_PADDING;
+
+      if (column.header) {
+        minWidth += column.header.length * CHAR_WIDTH_ESTIMATE;
+      }
+
+      if (column.icon) {
+        minWidth += HEADER_ICON_SPACE;
+      }
+
+      minWidth += SORT_ICON_SPACE;
+
+      if (column.filter) {
+        minWidth += FILTER_BUTTON_WIDTH;
+      }
+
+      return Math.max(minWidth, MIN_COLUMN_WIDTH) + "ch";
+    },
     onSort(event) {
       const sortedColumns = event.multiSortMeta || [];
 
@@ -555,8 +842,10 @@ export default {
         this.allSelected = this.checkAllSelected();
       });
     },
-    updateFilters(newFilters) {
-      this.filters = newFilters;
+    updateFilter(field, value) {
+      this.$nextTick(() => {
+        this.filters[field].constraints[0].value = value;
+      });
     },
     goToEditPage(event) {
       const row = event.data;
@@ -585,10 +874,20 @@ export default {
         return null;
       }
 
+      const clickedElement = event.originalEvent.target;
+      const isFormattedCollectionName = clickedElement.closest(" .formatted-collection-name");
+      if (isFormattedCollectionName && isFormattedCollectionName.classList.contains("clickable")) {
+        return null;
+      }
+
       if (window.Cypress) {
         window.location.href = `/${this.editPageRoutePrefix}/${row_id}`;
       } else {
-        window.open(`/${this.editPageRoutePrefix}/${row_id}`, "_blank");
+        if (event.originalEvent.ctrlKey || event.originalEvent.metaKey) {
+          window.open(`/${this.editPageRoutePrefix}/${row_id}`, "_blank");
+        } else {
+          window.location.href = `/${this.editPageRoutePrefix}/${row_id}`;
+        }
       }
     },
     getComponentProps(componentName, data) {
@@ -596,6 +895,7 @@ export default {
         FormattedItemName: {
           item_id: "item_id",
           itemType: "type",
+          enableClick: true,
           enableModifiedClick: true,
         },
         FormattedRefcode: {
@@ -609,6 +909,7 @@ export default {
         },
         FormattedCollectionName: {
           collection_id: "collection_id",
+          enableClick: true,
           enableModifiedClick: true,
         },
         ChemicalFormula: {
@@ -618,8 +919,12 @@ export default {
           collections: "collections",
         },
         Creators: {
-          creators: "creators",
+          creators: data.creators || [],
+          groups: data.groups || [],
           showNames: data.creators?.length === 1,
+        },
+        FormattedItemStatus: {
+          status: "status",
         },
         BlocksIconCounter: {
           count: "nblocks",
@@ -652,6 +957,11 @@ export default {
           props[prop] = true;
         }
       });
+
+      if (componentName === "Creators") {
+        props.creators = data.creators || [];
+        props.groups = data.groups || [];
+      }
 
       return props;
     },
@@ -769,12 +1079,11 @@ export default {
             state.columnWidths = customState.columnWidths;
           }
 
-          if (customState.first) {
-            state.first = customState.first;
-          }
+          state.first = 0;
 
           if (customState.rows) {
             state.rows = customState.rows;
+            this.updateRows(customState.rows);
           }
 
           if (customState.visibleColumns && Array.isArray(customState.visibleColumns)) {
@@ -792,6 +1101,7 @@ export default {
       } catch (error) {
         console.error("Error restoring DataTable state:", error);
         this.selectedColumns = [...this.availableColumns];
+        state.first = 0;
         return false;
       }
     },
@@ -801,6 +1111,27 @@ export default {
       this.$nextTick(() => {
         location.reload();
       });
+    },
+    handleDateFilterModeChange(field) {
+      this.filters[field].constraints[0].value = null;
+
+      if (this.dateFilterMode === "range") {
+        this.filters[field].constraints[0].matchMode = "dateRange";
+      } else if (this.dateFilterMode === "before") {
+        this.filters[field].constraints[0].matchMode = "dateBefore";
+      } else if (this.dateFilterMode === "after") {
+        this.filters[field].constraints[0].matchMode = "dateAfter";
+      }
+    },
+    onDateRangeSelect(value) {
+      if (
+        this.dateFilterMode === "range" &&
+        Array.isArray(value) &&
+        value.length === 2 &&
+        value[1] !== null
+      ) {
+        return;
+      }
     },
   },
 };

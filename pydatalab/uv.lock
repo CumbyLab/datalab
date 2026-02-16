@@ -114,6 +114,18 @@ wheels = [
 ]
 
 [[package]]
+name = "apscheduler"
+version = "3.11.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tzlocal" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/07/12/3e4389e5920b4c1763390c6d371162f3784f86f85cd6d6c1bfe68eef14e2/apscheduler-3.11.2.tar.gz", hash = "sha256:2a9966b052ec805f020c8c4c3ae6e6a06e24b1bf19f2e11d91d8cca0473eef41", size = 108683, upload-time = "2025-12-22T00:39:34.884Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/64/2e54428beba8d9992aa478bb8f6de9e4ecaa5f8f513bcfd567ed7fb0262d/apscheduler-3.11.2-py3-none-any.whl", hash = "sha256:ce005177f741409db4e4dd40a7431b76feb856b9dd69d57e0da49d6715bfd26d", size = 64439, upload-time = "2025-12-22T00:39:33.303Z" },
+]
+
+[[package]]
 name = "asteval"
 version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
@@ -483,8 +495,8 @@ wheels = [
 
 [[package]]
 name = "datalab-app-plugin-insitu"
-version = "0.2.0"
-source = { git = "https://github.com/datalab-org/datalab-app-plugin-insitu.git?rev=v0.2.0#fe00a3f7f0179a62d1cbe5ee361a03eb23c5a0ae" }
+version = "0.3.2"
+source = { git = "https://github.com/datalab-org/datalab-app-plugin-insitu.git?rev=v0.3.2#4eeec75038a1eaf51d08d9554ee57c2f45e0cb44" }
 dependencies = [
     { name = "datalab-server" },
     { name = "lmfit" },
@@ -514,6 +526,7 @@ name = "datalab-server"
 source = { editable = "." }
 dependencies = [
     { name = "bokeh" },
+    { name = "deepdiff" },
     { name = "matplotlib" },
     { name = "pandas", extra = ["excel"] },
     { name = "periodictable" },
@@ -524,6 +537,7 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
+    { name = "apscheduler" },
     { name = "flask" },
     { name = "flask-compress" },
     { name = "flask-cors" },
@@ -576,6 +590,7 @@ deploy = [
     { name = "gunicorn" },
 ]
 server = [
+    { name = "apscheduler" },
     { name = "flask" },
     { name = "flask-compress" },
     { name = "flask-cors" },
@@ -599,7 +614,6 @@ dev = [
     { name = "mkdocs-awesome-pages-plugin" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
-    { name = "mongomock" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -609,9 +623,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "apscheduler", marker = "extra == 'server'", specifier = "~=3.10" },
     { name = "bokeh", specifier = "~=2.4,<3.0" },
-    { name = "datalab-app-plugin-insitu", marker = "extra == 'app-plugins-git'", git = "https://github.com/datalab-org/datalab-app-plugin-insitu.git?rev=v0.2.0" },
+    { name = "datalab-app-plugin-insitu", marker = "extra == 'app-plugins-git'", git = "https://github.com/datalab-org/datalab-app-plugin-insitu.git?rev=v0.3.2" },
     { name = "datalab-server", extras = ["apps", "chat", "server"], marker = "extra == 'all'" },
+    { name = "deepdiff", specifier = "~=8.1" },
     { name = "flask", marker = "extra == 'server'", specifier = "~=3.0" },
     { name = "flask-compress", marker = "extra == 'server'", specifier = "~=1.15" },
     { name = "flask-cors", marker = "extra == 'server'", specifier = "~=6.0" },
@@ -626,8 +642,8 @@ requires-dist = [
     { name = "langchain-openai", marker = "extra == 'chat'", specifier = "~=0.1" },
     { name = "matador-db", marker = "extra == 'apps'", specifier = ">=0.11.2" },
     { name = "matplotlib", specifier = "~=3.8" },
-    { name = "navani", marker = "extra == 'apps'", specifier = ">=0.1.11" },
-    { name = "nmrglue", marker = "extra == 'apps'", specifier = "~=0.10" },
+    { name = "navani", marker = "extra == 'apps'", specifier = ">=0.1.13" },
+    { name = "nmrglue", marker = "extra == 'apps'", git = "https://github.com/jjhelmus/nmrglue.git?rev=b6408751bf18801a0a4ce084acf4d31335e2b02a" },
     { name = "pandas", extras = ["excel"], specifier = "~=2.2" },
     { name = "periodictable", specifier = "~=1.7" },
     { name = "pillow", marker = "extra == 'server'", specifier = "~=11.0" },
@@ -656,12 +672,23 @@ dev = [
     { name = "mkdocs-awesome-pages-plugin", specifier = "~=2.9" },
     { name = "mkdocs-material", specifier = "~=9.5" },
     { name = "mkdocstrings", extras = ["python"], specifier = "~=0.29" },
-    { name = "mongomock", specifier = "~=4.1" },
     { name = "pre-commit", specifier = "~=4.0" },
     { name = "pytest", specifier = "~=8.2" },
     { name = "pytest-cov", specifier = "~=5.0" },
     { name = "pytest-dependency", specifier = "~=0.6" },
     { name = "pytest-memray", specifier = "~=1.8" },
+]
+
+[[package]]
+name = "deepdiff"
+version = "8.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "orderly-set" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/19/76/36c9aab3d5c19a94091f7c6c6e784efca50d87b124bf026c36e94719f33c/deepdiff-8.6.1.tar.gz", hash = "sha256:ec56d7a769ca80891b5200ec7bd41eec300ced91ebcc7797b41eb2b3f3ff643a", size = 634054, upload-time = "2025-09-03T19:40:41.461Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/e6/efe534ef0952b531b630780e19cabd416e2032697019d5295defc6ef9bd9/deepdiff-8.6.1-py3-none-any.whl", hash = "sha256:ee8708a7f7d37fb273a541fa24ad010ed484192cd0c4ffc0fa0ed5e2d4b9e78b", size = 91378, upload-time = "2025-09-03T19:40:39.679Z" },
 ]
 
 [[package]]
@@ -1696,20 +1723,6 @@ wheels = [
 ]
 
 [[package]]
-name = "mongomock"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-    { name = "pytz" },
-    { name = "sentinels" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/a4/4a560a9f2a0bec43d5f63104f55bc48666d619ca74825c8ae156b08547cf/mongomock-4.3.0.tar.gz", hash = "sha256:32667b79066fabc12d4f17f16a8fd7361b5f4435208b3ba32c226e52212a8c30", size = 135862, upload-time = "2024-11-16T11:23:25.957Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/4d/8bea712978e3aff017a2ab50f262c620e9239cc36f348aae45e48d6a4786/mongomock-4.3.0-py2.py3-none-any.whl", hash = "sha256:5ef86bd12fc8806c6e7af32f21266c61b6c4ba96096f85129852d1c4fec1327e", size = 64891, upload-time = "2024-11-16T11:23:24.748Z" },
-]
-
-[[package]]
 name = "multidict"
 version = "6.6.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1768,7 +1781,7 @@ wheels = [
 
 [[package]]
 name = "navani"
-version = "0.1.12"
+version = "0.1.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "datalab-org-galvani" },
@@ -1781,9 +1794,9 @@ dependencies = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/cc/8be94a7133a41277ca31aced56e67a4e25f2ea34c91f3da7085ed59cadcf/navani-0.1.12.tar.gz", hash = "sha256:b87237ccac6d1fa25804ff6f322228857b45554a621ce7b1a275a9adb4ddfa63", size = 4697700, upload-time = "2025-07-07T15:21:37.565Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/f5/32e81658448ab177074c185f0982cc39e2a7898214ebbf06a6b40918a0b8/navani-0.1.13.tar.gz", hash = "sha256:51efaacaddbf52d3f2df6834e3fa7bc5654957db7a375506efcce91bd40dedb2", size = 4700411, upload-time = "2025-11-04T09:53:43.113Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/2b/5409d5d73cadd4f01ca11b9b5bf82ca690b0e89a0cf61b2ea79ec2e27be2/navani-0.1.12-py3-none-any.whl", hash = "sha256:e9eb27d2365a21816c5df3828fbe984b1658d58701765ca65b66d24317fe4bb4", size = 14953, upload-time = "2025-07-07T15:21:36.47Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/d5/139fc1f2681a587c1ae22e1f57b15138357f239f172ee5b48463b56856b5/navani-0.1.13-py3-none-any.whl", hash = "sha256:1092a943c1e4d1d492591645da94bc5d06555bf27f10170fe1bbfb04ef55eaea", size = 14952, upload-time = "2025-11-04T09:53:40.954Z" },
 ]
 
 [[package]]
@@ -1800,16 +1813,12 @@ wheels = [
 
 [[package]]
 name = "nmrglue"
-version = "0.11"
-source = { registry = "https://pypi.org/simple" }
+version = "0.12.dev0"
+source = { git = "https://github.com/jjhelmus/nmrglue.git?rev=b6408751bf18801a0a4ce084acf4d31335e2b02a#b6408751bf18801a0a4ce084acf4d31335e2b02a" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/77/82/2101ea5440d357641b234a092b53177974d84b507f9e69fc09e3e7997639/nmrglue-0.11.tar.gz", hash = "sha256:9e740a02d34ce5df9eb0390274c6a5f37b4837d59139512a3dd169106a8e3fe1", size = 205874, upload-time = "2024-10-29T21:07:20.314Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/e4/79b679185d83a7b2513997203afd6c23359063d97738968f51d34e3ee9c8/nmrglue-0.11-py2.py3-none-any.whl", hash = "sha256:6e698b07cd71d12034664a3414ce0bb7bf5cd87cf750b03e33e439fb31dc13bd", size = 226135, upload-time = "2024-10-29T21:07:18.669Z" },
 ]
 
 [[package]]
@@ -1892,6 +1901,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050", size = 186464, upload-time = "2024-06-28T14:03:44.161Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2", size = 250910, upload-time = "2024-06-28T14:03:41.161Z" },
+]
+
+[[package]]
+name = "orderly-set"
+version = "5.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/88/39c83c35d5e97cc203e9e77a4f93bf87ec89cf6a22ac4818fdcc65d66584/orderly_set-5.5.0.tar.gz", hash = "sha256:e87185c8e4d8afa64e7f8160ee2c542a475b738bc891dc3f58102e654125e6ce", size = 27414, upload-time = "2025-07-10T20:10:55.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/27/fb8d7338b4d551900fa3e580acbe7a0cf655d940e164cb5c00ec31961094/orderly_set-5.5.0-py3-none-any.whl", hash = "sha256:46f0b801948e98f427b412fcabb831677194c05c3b699b80de260374baa0b1e7", size = 13068, upload-time = "2025-07-10T20:10:54.377Z" },
 ]
 
 [[package]]
@@ -2688,12 +2706,6 @@ wheels = [
 ]
 
 [[package]]
-name = "sentinels"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ac/b7/1af07a98390aba07da31807f3723e7bbd003d6441b4b3d67b20d97702b23/sentinels-1.0.0.tar.gz", hash = "sha256:7be0704d7fe1925e397e92d18669ace2f619c92b5d4eb21a89f31e026f9ff4b1", size = 4074, upload-time = "2016-08-30T07:19:19.963Z" }
-
-[[package]]
 name = "setuptools"
 version = "80.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2932,6 +2944,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/95/32/1a225d6164441be760d75c2c42e2780dc0873fe382da3e98a2e1e48361e5/tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9", size = 196380, upload-time = "2025-03-23T13:54:43.652Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/23/c7abc0ca0a1526a0774eca151daeb8de62ec457e77262b66b359c3c7679e/tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8", size = 347839, upload-time = "2025-03-23T13:54:41.845Z" },
+]
+
+[[package]]
+name = "tzlocal"
+version = "5.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8b/2e/c14812d3d4d9cd1773c6be938f89e5735a1f11a9f184ac3639b93cef35d5/tzlocal-5.3.1.tar.gz", hash = "sha256:cceffc7edecefea1f595541dbd6e990cb1ea3d19bf01b2809f362a03dd7921fd", size = 30761, upload-time = "2025-03-05T21:17:41.549Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c2/14/e2a54fabd4f08cd7af1c07030603c3356b74da07f7cc056e600436edfa17/tzlocal-5.3.1-py3-none-any.whl", hash = "sha256:eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d", size = 18026, upload-time = "2025-03-05T21:17:39.857Z" },
 ]
 
 [[package]]

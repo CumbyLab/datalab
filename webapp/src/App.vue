@@ -5,10 +5,20 @@
 
 <script>
 import DialogContainer from "@/components/DialogContainer.vue";
+import { getApiConfig, loadItemSchemas } from "@/server_fetch_utils.js";
 
 export default {
   components: {
     DialogContainer,
+  },
+  async created() {
+    // Wait for the router to resolve the initial route before loading schemas,
+    // so that redirect-only routes (e.g., /files/*) can navigate away
+    // without triggering unnecessary API requests.
+    await this.$router.isReady();
+    if (this.$route.name === "files-redirect") return;
+    await loadItemSchemas();
+    await getApiConfig();
   },
 };
 </script>
@@ -16,6 +26,7 @@ export default {
 <style>
 body {
   margin: 0rem !important; /* for some reason, tinymce sets margin 1rem globally :o */
+  font-family: var(--font-primary) !important;
 }
 
 * {
@@ -112,5 +123,9 @@ body {
 
 .clickable {
   cursor: pointer;
+}
+
+.modal {
+  font-family: var(--font-primary);
 }
 </style>

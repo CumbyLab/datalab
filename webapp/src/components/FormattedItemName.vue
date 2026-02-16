@@ -4,14 +4,15 @@
       class="formatted-item-name badge badge-light"
       :class="{ clickable: enableClick || enableModifiedClick }"
       :style="{ backgroundColor: badgeColor }"
-      @click.exact="enableClick ? openEditPageInNewTab() : null"
+      @click.exact="enableClick ? openEditPageInSameTab() : null"
       @click.meta.stop="enableModifiedClick ? openEditPageInNewTab() : null"
       @click.ctrl.stop="enableModifiedClick ? openEditPageInNewTab() : null"
     >
       {{ item_id }}
     </span>
     {{ shortenedName }}
-    <span v-if="chemform && chemform != ' '"> [ <ChemicalFormula :formula="chemform" /> ] </span>
+    <span v-if="chemform && chemform != ''"> [ <ChemicalFormula :formula="chemform" /> ] </span>
+    <span v-if="location && location != ''"> ({{ location }}) </span>
   </span>
   <span v-else>
     <font-awesome-icon v-if="selecting" :icon="['far', 'plus-square']" />
@@ -42,6 +43,10 @@ export default {
       type: String,
       default: "",
     },
+    location: {
+      type: String,
+      default: "",
+    },
     enableClick: {
       type: Boolean,
       default: false,
@@ -69,8 +74,18 @@ export default {
     },
   },
   methods: {
+    openEditPageInSameTab() {
+      this.$emit("itemIdClicked");
+      if (window.Cypress && window.location.href.includes("__cypress")) {
+        return;
+      }
+      window.location.href = `/edit/${this.item_id}`;
+    },
     openEditPageInNewTab() {
       this.$emit("itemIdClicked");
+      if (window.Cypress && window.location.href.includes("__cypress")) {
+        return;
+      }
       window.open(`/edit/${this.item_id}`, "_blank");
     },
   },

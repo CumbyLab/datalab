@@ -2,6 +2,8 @@ import { createStore } from "vuex";
 // import { createLogger } from "vuex";
 // import { set } from 'vue'
 
+import { getCurrentUser } from "@/server_fetch_utils.js";
+
 export default createStore({
   state: {
     all_item_data: {}, // keys: item_ids, vals: objects containing all data
@@ -24,14 +26,20 @@ export default createStore({
     remoteDirectoryTree: {},
     remoteDirectoryTreeSecondsSinceLastUpdate: null,
     itemGraphData: null,
+    itemGraphIsLoading: false,
     remoteDirectoryTreeIsLoading: false,
     fileSelectModalIsOpen: false,
     currentUserDisplayName: null,
     currentUserID: null,
+    currentUserRole: null,
+    currentUserInfoLoading: false,
+    currentUserInfoLoaded: false,
+    currentUserInfoPromise: null,
     serverInfo: null,
     blocksInfos: {},
     currentUserIsUnverified: false,
     hasUnverifiedUser: false,
+    adminSuperUserMode: false,
     datatablePaginationSettings: {
       samples: {
         page: 0,
@@ -55,6 +63,11 @@ export default createStore({
       },
     },
     block_errors: {},
+    apiConfig: {
+      maxUploadBytes: null,
+    },
+    schemas: {}, // keys: item types, vals: schema objects
+    userActivityCache: {}, // keys: userId (or 'combined' for combined activity), vals: { data, timestamp }
   },
   mutations: {
     setServerInfo(state, serverInfo) {
@@ -78,6 +91,9 @@ export default createStore({
     },
     setCurrentUserID(state, userID) {
       state.currentUserID = userID;
+    },
+    setCurrentUserRole(state, role) {
+      state.currentUserRole = role;
     },
     setIsUnverified(state, isUnverified) {
       state.currentUserIsUnverified = isUnverified;
@@ -255,8 +271,8 @@ export default createStore({
       //requires the following fields in payload:
       // item_id, item_data
       Object.assign(state.all_item_data[payload.item_id], payload.item_data);
-      if (payload.item_data.creators && state.saved_status_items[payload.item_id] == true) {
-        state.saved_status_items[payload.item_id] = true;
+      if (payload.item_data.creators || payload.item_data.groups) {
+        return;
       } else {
         state.saved_status_items[payload.item_id] = false;
       }
@@ -336,6 +352,12 @@ export default createStore({
     setItemGraph(state, payload) {
       state.itemGraphData = payload;
     },
+    setCurrentUserInfoLoading(state, isLoading) {
+      state.currentUserInfoLoading = isLoading;
+    },
+    setItemGraphIsLoading(state, isLoading) {
+      state.itemGraphIsLoading = isLoading;
+    },
     setBlocksInfos(state, blocksInfos) {
       blocksInfos.forEach((info) => {
         state.blocksInfos[info.id] = info;
@@ -346,6 +368,14 @@ export default createStore({
     },
     updateHasUnverified(state, hasUnverified) {
       state.hasUnverifiedUser = hasUnverified;
+    },
+    setAdminSuperUserMode(state, enabled) {
+      state.adminSuperUserMode = enabled;
+      if (enabled) {
+        sessionStorage.setItem("adminSuperUserMode", enabled);
+      } else {
+        sessionStorage.removeItem("adminSuperUserMode");
+      }
     },
     setRows(state, { type, rows }) {
       state.datatablePaginationSettings[type].rows = rows;
@@ -366,6 +396,20 @@ export default createStore({
       } else {
         delete state.block_errors[block_id];
       }
+    },
+    setApiConfig(state, config) {
+      state.apiConfig = config;
+    },
+    setSchema(state, { type, schema }) {
+      state.schemas[type] = schema;
+    },
+    setUserActivityCache(state, { userId, data }) {
+      // userId can be a user ID string or 'combined' for combined activity
+      // data is the activity data object
+      state.userActivityCache[userId || "combined"] = {
+        data,
+        timestamp: Date.now(),
+      };
     },
   },
   getters: {
@@ -390,8 +434,35 @@ export default createStore({
     getBlocksInfos(state) {
       return Object.values(state.blocksInfos);
     },
+    getUserActivityCache: (state) => (userId) => {
+      // userId can be a user ID string or null/undefined for combined activity
+      const cacheKey = userId || "combined";
+      return state.userActivityCache[cacheKey];
+    },
+    isAdminSuperUserModeActive() {
+      // Super-user mode is only active if: flag is set, user is logged in, and user is an admin
+      return sessionStorage.getItem("adminSuperUserMode");
+    },
   },
-  actions: {},
+  actions: {
+    async fetchCurrentUser({ state }, { fullInfo = false } = {}) {
+      if (!fullInfo && state.currentUserInfoLoaded && state.currentUserID !== null) {
+        return state.currentUserID !== null;
+      }
+
+      if (fullInfo && state.currentUserInfoLoaded) {
+        return state.currentUserID !== null
+          ? {
+              immutable_id: state.currentUserID,
+              display_name: state.currentUserDisplayName,
+              account_status: state.currentUserIsUnverified ? "unverified" : "active",
+            }
+          : null;
+      }
+
+      return await getCurrentUser();
+    },
+  },
   modules: {},
   // plugins: [createLogger()],
 });

@@ -49,7 +49,7 @@ export default {
     },
     isLarge: {
       type: Boolean,
-      default: false,
+      default: true,
     },
   },
   emits: ["update:modelValue"],
@@ -110,5 +110,21 @@ export default {
 
 .btn:disabled {
   cursor: not-allowed;
+}
+
+.modal-dialog {
+  margin: 5vh auto;
+}
+
+.modal-content {
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-body {
+  overflow: visible;
+  flex: 1;
 }
 </style>

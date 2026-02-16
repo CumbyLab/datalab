@@ -17,13 +17,19 @@ def get_graph_cy_format(
     item_id: str | None = None,
     collection_id: str | None = None,
     hide_collections: bool = True,
+    max_depth: int = 1,
 ):
     collection_id = request.args.get("collection_id", type=str)
+    hide_collections = request.args.get(
+        "hide_collections", default=True, type=lambda v: v.lower() == "true"
+    )
+    max_depth = request.args.get("max_depth", default=1, type=int)
 
     if item_id is None:
         if collection_id is not None:
             collection_immutable_id = flask_mongo.db.collections.find_one(
-                {"collection_id": collection_id}, projection={"_id": 1}
+                {"collection_id": collection_id, **get_default_permissions(user_only=False)},
+                projection={"_id": 1},
             )
             if not collection_immutable_id:
                 return (
@@ -49,33 +55,73 @@ def get_graph_cy_format(
         all_documents.rewind()
 
     else:
-        all_documents = list(
-            flask_mongo.db.items.find(
-                {
-                    "$or": [{"item_id": item_id}, {"relationships.item_id": item_id}],
-                    **get_default_permissions(user_only=False),
-                },
-                projection={"item_id": 1, "name": 1, "type": 1, "relationships": 1},
-            )
+        main_item = flask_mongo.db.items.find_one(
+            {
+                "item_id": item_id,
+                **get_default_permissions(user_only=False),
+            },
+            projection={"item_id": 1, "name": 1, "type": 1, "relationships": 1},
         )
 
-        node_ids = {document["item_id"] for document in all_documents} | {
-            relationship.get("item_id")
-            for document in all_documents
-            for relationship in document.get("relationships", [])
-        }
-        if len(node_ids) > 1:
-            or_query = [{"item_id": id} for id in node_ids if id != item_id]
-            next_shell = flask_mongo.db.items.find(
+        if not main_item:
+            return (
+                jsonify(status="error", message=f"Item {item_id} not found or no permission"),
+                404,
+            )
+
+        node_ids = {item_id}
+        all_documents = [main_item]
+
+        def add_related_items(current_item_id: str, current_depth: int):
+            if current_depth > max_depth:
+                return
+
+            current_item = flask_mongo.db.items.find_one(
                 {
-                    "$or": or_query,
+                    "item_id": current_item_id,
                     **get_default_permissions(user_only=False),
                 },
                 projection={"item_id": 1, "name": 1, "type": 1, "relationships": 1},
             )
 
-            all_documents.extend(next_shell)
-            node_ids = node_ids | {document["item_id"] for document in all_documents}
+            if not current_item:
+                return
+
+            for relationship in current_item.get("relationships", []) or []:
+                if relationship.get("item_id") and relationship["item_id"] not in node_ids:
+                    node_ids.add(relationship["item_id"])
+                    related_item = flask_mongo.db.items.find_one(
+                        {
+                            "item_id": relationship["item_id"],
+                            **get_default_permissions(user_only=False),
+                        },
+                        projection={"item_id": 1, "name": 1, "type": 1, "relationships": 1},
+                    )
+                    if related_item:
+                        all_documents.append(related_item)
+                        add_related_items(relationship["item_id"], current_depth + 1)
+
+            incoming_items = list(
+                flask_mongo.db.items.find(
+                    {
+                        "relationships": {
+                            "$elemMatch": {
+                                "item_id": current_item_id,
+                            }
+                        },
+                        **get_default_permissions(user_only=False),
+                    },
+                    projection={"item_id": 1, "name": 1, "type": 1, "relationships": 1},
+                )
+            )
+
+            for incoming_item in incoming_items:
+                if incoming_item["item_id"] not in node_ids:
+                    node_ids.add(incoming_item["item_id"])
+                    all_documents.append(incoming_item)
+                    add_related_items(incoming_item["item_id"], current_depth + 1)
+
+        add_related_items(item_id, 1)
 
     nodes = []
     edges = []
@@ -166,12 +212,18 @@ def get_graph_cy_format(
                 }
             )
 
-    whitelist = {edge["data"]["source"] for edge in edges} | {item_id}
+    whitelist = {edge["data"]["source"] for edge in edges} | {
+        edge["data"]["target"] for edge in edges
+    }
+    if item_id:
+        whitelist.add(item_id)
 
     nodes = [
         node
         for node in nodes
-        if node["data"]["type"] in ("samples", "cells") or node["data"]["id"] in whitelist
+        if node["data"]["type"] in ("samples", "cells")
+        or node["data"]["id"] in whitelist
+        or node["data"]["id"].startswith("Collection:")
     ]
 
     return (jsonify(status="success", nodes=nodes, edges=edges), 200)

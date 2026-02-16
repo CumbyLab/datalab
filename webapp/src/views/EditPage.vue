@@ -19,6 +19,7 @@
           data-toggle="dropdown"
           aria-haspopup="true"
           aria-expanded="false"
+          data-testid="add-block-button-top"
           @click="isMenuDropdownVisible = !isMenuDropdownVisible"
         >
           <font-awesome-icon icon="cubes" fixed-width />
@@ -32,15 +33,45 @@
           style="display: block"
           aria-labelledby="navbarDropdown"
         >
-          <template v-for="blockInfo in blocksInfos" :key="blockInfo.id">
-            <span v-if="blockInfo.id !== 'notsupported'" @click="newBlock($event, blockInfo.id)">
-              <StyledBlockHelp :block-info="blockInfo.attributes" />
-            </span>
-          </template>
+          <h6 v-if="suggestedBlockTypes.length > 0" class="dropdown-header">
+            Suggested based on your files
+          </h6>
+          <span
+            v-for="blockInfo in suggestedBlockTypes"
+            :key="'nav-suggested-' + blockInfo.id"
+            @click="newBlock($event, blockInfo.id)"
+          >
+            <BlockTooltip :block-info="blockInfo.attributes" />
+          </span>
+          <div
+            v-if="suggestedBlockTypes.length > 0 && allBlockTypes.length > 0"
+            class="dropdown-divider"
+          ></div>
+          <h6 v-if="allBlockTypes.length > 0" class="dropdown-header">All block types</h6>
+          <span
+            v-for="blockInfo in allBlockTypes"
+            :key="'nav-all-' + blockInfo.id"
+            @click="newBlock($event, blockInfo.id)"
+          >
+            <BlockTooltip :block-info="blockInfo.attributes" />
+          </span>
         </div>
       </div>
+      <ExportDropdown
+        :item-id="item_id"
+        :collection-id="itemType === 'collections' ? item_id : null"
+        :item-type="itemType"
+      />
       <a class="nav-item nav-link" :href="itemApiUrl" target="_blank">
         <font-awesome-icon icon="code" fixed-width /> View JSON
+      </a>
+      <a
+        v-if="itemDataLoaded"
+        class="nav-item nav-link"
+        title="Version History"
+        @click="showVersionHistory"
+      >
+        <font-awesome-icon icon="history" fixed-width /> Versions
       </a>
     </div>
     <div class="navbar-nav ml-auto">
@@ -89,20 +120,74 @@
           size="2x"
         />
       </div>
+
+      <div class="mt-4 text-center">
+        <div class="dropup d-inline-block">
+          <button
+            id="bottomAddBlockDropdown"
+            class="btn btn-primary dropdown-toggle"
+            type="button"
+            data-toggle="dropdown"
+            aria-haspopup="true"
+            aria-expanded="false"
+            data-testid="add-block-button-bottom"
+            @click="isBottomDropdownVisible = !isBottomDropdownVisible"
+          >
+            <font-awesome-icon icon="cubes" fixed-width /> Add a block
+          </button>
+          <div
+            class="dropdown-menu"
+            :class="{ show: isBottomDropdownVisible }"
+            aria-labelledby="bottomAddBlockDropdown"
+            data-testid="add-block-dropdown-bottom"
+          >
+            <h6 v-if="suggestedBlockTypes.length > 0" class="dropdown-header">
+              Suggested based on your files
+            </h6>
+            <span
+              v-for="blockInfo in suggestedBlockTypes"
+              :key="'bottom-suggested-' + blockInfo.id"
+              @click="newBlock($event, blockInfo.id)"
+            >
+              <BlockTooltip :block-info="blockInfo.attributes" />
+            </span>
+            <div
+              v-if="suggestedBlockTypes.length > 0 && allBlockTypes.length > 0"
+              class="dropdown-divider"
+            ></div>
+            <h6 v-if="allBlockTypes.length > 0" class="dropdown-header">All block types</h6>
+            <span
+              v-for="blockInfo in allBlockTypes"
+              :key="'bottom-all-' + blockInfo.id"
+              @click="newBlock($event, blockInfo.id)"
+            >
+              <BlockTooltip :block-info="blockInfo.attributes" />
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <FileSelectModal :item_id="item_id" />
+    <VersionHistoryModal
+      v-model="isVersionHistoryVisible"
+      :refcode="refcode"
+      :item-id="item_id"
+      :current-version="item_data.version"
+      @version-restored="handleVersionRestored"
+    />
   </div>
 </template>
 
 <script>
 import { DialogService } from "@/services/DialogService";
 
-import TinyMceInline from "@/components/TinyMceInline";
+import TiptapInline from "@/components/TiptapInline";
 import SelectableFileTree from "@/components/SelectableFileTree";
 
 import FileList from "@/components/FileList";
 import FileSelectModal from "@/components/FileSelectModal";
+import VersionHistoryModal from "@/components/VersionHistoryModal.vue";
 import {
   getItemData,
   getItemByRefcode,
@@ -116,24 +201,26 @@ import FormattedItemName from "@/components/FormattedItemName";
 
 import setupUppy from "@/file_upload.js";
 
-import tinymce from "tinymce/tinymce";
-
 import { itemTypes, API_URL, customBlockTypes } from "@/resources.js";
 import BokehBlock from "@/components/datablocks/BokehBlock.vue";
 import ErrorBlock from "@/components/datablocks/ErrorBlock.vue";
 import { formatDistanceToNow } from "date-fns";
 
-import StyledBlockHelp from "@/components/StyledBlockHelp";
+import BlockTooltip from "@/components/BlockTooltip";
+
+import ExportDropdown from "@/components/ExportDropdown";
 
 export default {
   components: {
-    TinyMceInline,
+    TiptapInline,
     SelectableFileTree,
     FileList,
     LoginDetails,
     FileSelectModal,
+    VersionHistoryModal,
     FormattedItemName,
-    StyledBlockHelp,
+    BlockTooltip,
+    ExportDropdown,
   },
   async beforeRouteLeave(to, from, next) {
     // give warning before leaving the page by the vue router (which would not trigger "beforeunload")
@@ -161,11 +248,13 @@ export default {
       blockInfoLoaded: false,
       blocksLoaded: false,
       isMenuDropdownVisible: false,
+      isBottomDropdownVisible: false,
       selectedRemoteFiles: [],
       isLoadingRemoteTree: false,
       isLoadingRemoteFiles: false,
       isLoadingNewBlock: false,
       lastModified: null,
+      isVersionHistoryVisible: false,
     };
   },
   computed: {
@@ -212,6 +301,42 @@ export default {
     itemApiUrl() {
       return API_URL + "/items/" + this.refcode;
     },
+    uploadedFileExtensions() {
+      if (!this.files || this.files.length === 0) {
+        return [];
+      }
+      const extensions = this.files.map((file) => file.extension).filter((ext) => ext);
+      return [...new Set(extensions)];
+    },
+    suggestedBlockTypes() {
+      if (this.uploadedFileExtensions.length === 0 || !this.blockInfoLoaded) {
+        return [];
+      }
+
+      return this.blocksInfos.filter((blockInfo) => {
+        if (blockInfo.id === "notsupported") {
+          return false;
+        }
+
+        const acceptedExtensions = blockInfo.attributes?.accepted_file_extensions;
+        if (!acceptedExtensions || acceptedExtensions.length === 0) {
+          return false;
+        }
+
+        return this.uploadedFileExtensions.some((uploadedExt) =>
+          acceptedExtensions.some(
+            (acceptedExt) => uploadedExt.toLowerCase() === acceptedExt.toLowerCase(),
+          ),
+        );
+      });
+    },
+    allBlockTypes() {
+      if (!this.blockInfoLoaded) {
+        return [];
+      }
+
+      return this.blocksInfos.filter((blockInfo) => blockInfo.id !== "notsupported");
+    },
   },
   watch: {
     // add a warning before leaving page if unsaved
@@ -254,6 +379,7 @@ export default {
   methods: {
     async newBlock(event, blockType, index = null) {
       this.isMenuDropdownVisible = false;
+      this.isBottomDropdownVisible = false;
       this.isLoadingNewBlock = true;
       this.$refs.blockLoadingIndicator.scrollIntoView({
         behavior: "smooth",
@@ -292,37 +418,43 @@ export default {
       }
     },
     saveSample() {
-      // trigger the mce save so that they update the store with their content
-      tinymce.editors.forEach((editor) => {
-        editor.isDirty() && editor.save();
-      });
       saveItem(this.item_id);
       this.lastModified = "just now";
     },
     async getSampleData() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const accessToken = urlParams.get("at");
+
       if (this.item_id == null) {
-        getItemByRefcode(this.refcode).then(() => {
-          this.itemDataLoaded = true;
-          this.$nextTick(() => {
-            this.$store.commit("setItemSaved", { item_id: this.item_id, isSaved: true });
+        getItemByRefcode(this.refcode, accessToken)
+          .then(() => {
+            this.itemDataLoaded = true;
+            this.$nextTick(() => {
+              this.$store.commit("setItemSaved", { item_id: this.item_id, isSaved: true });
+            });
+            this.item_id = this.$store.state.refcode_to_id[this.refcode];
+            this.updateBlocks();
+          })
+          .catch(() => {
+            this.itemDataLoaded = false;
           });
-          this.item_id = this.$store.state.refcode_to_id[this.refcode];
-          this.updateBlocks();
-        });
       } else {
-        getItemData(this.item_id).then(() => {
-          this.itemDataLoaded = true;
-          this.refcode = this.item_data.refcode;
-          this.$nextTick(() => {
-            this.$store.commit("setItemSaved", { item_id: this.item_id, isSaved: true });
+        getItemData(this.item_id, accessToken)
+          .then(() => {
+            this.itemDataLoaded = true;
+            this.refcode = this.item_data.refcode;
+            this.$nextTick(() => {
+              this.$store.commit("setItemSaved", { item_id: this.item_id, isSaved: true });
+            });
+            this.updateBlocks();
+          })
+          .catch(() => {
+            this.itemDataLoaded = false;
           });
-          this.updateBlocks();
-        });
       }
     },
-
     async updateBlocks() {
-      if (this.itemDataLoaded) {
+      if (this.itemDataLoaded && this.item_data && this.item_data.display_order) {
         // update each block asynchronously
         this.item_data.display_order.forEach((block_id) => {
           console.log(`calling update on block ${block_id}`);
@@ -350,6 +482,27 @@ export default {
       } else {
         this.lastModified = formatDistanceToNow(new Date(item_date), { addSuffix: true });
       }
+    },
+    showVersionHistory() {
+      this.isVersionHistoryVisible = true;
+    },
+    async handleVersionRestored() {
+      // Reload the item data after version restoration
+      if (this.refcode) {
+        await getItemByRefcode(this.refcode);
+      } else if (this.item_id) {
+        await getItemData(this.item_id);
+      }
+      // Mark item as saved (restored data is already in DB)
+      this.$store.commit("setItemSaved", { item_id: this.item_id, isSaved: true });
+      // Mark all blocks as saved
+      this.item_data.display_order.forEach((block_id) => {
+        this.$store.commit("setBlockSaved", { block_id: block_id, isSaved: true });
+      });
+      // Refresh the blocks
+      await this.updateBlocks();
+      // Update last modified time
+      this.setLastModified();
     },
   },
 };
@@ -416,5 +569,26 @@ label,
 
 .dropdown-menu {
   cursor: pointer;
+}
+
+.dropdown-menu {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.dropdown-header {
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dropdown-item {
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background-color: #f8f9fa;
 }
 </style>

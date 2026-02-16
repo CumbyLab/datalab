@@ -103,7 +103,7 @@ def _call_remote_stat(path: str):
     hostname, file_path = path.split(":", 1)
     command = f"ssh {hostname} 'stat -c %Y {file_path}'"
     process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: S602
-    LOGGER.debug(f"Calling {command}")
+    LOGGER.debug("Calling %s", command)
     try:
         stdout, stderr = process.communicate(timeout=20)
         timestamp = int(stdout.decode("utf-8"))
@@ -146,7 +146,9 @@ def _check_and_sync_file(file_info: File, file_id: ObjectId) -> File:
     remote: RemoteFilesystem | None = directories_dict.get(file_info.source_server_name, None)
     if not remote:
         LOGGER.warning(
-            f"Could not find desired remote for {file_info.source_server_name!r} in {directories_dict}, cannot sync file"
+            "Could not find desired remote for %r in %s, cannot sync file",
+            file_info.source_server_name,
+            directories_dict,
         )
         return file_info
 
@@ -252,11 +254,37 @@ def get_file_info_by_id(file_id: str | ObjectId, update_if_live: bool = True) ->
 
     """
     LOGGER.debug("getting file for file_id: %s", file_id)
-    file_collection = flask_mongo.db.files
+    item_collection = flask_mongo.db.items
     file_id = ObjectId(file_id)
-    file_info = file_collection.find_one(
-        {"_id": file_id, **get_default_permissions(user_only=False)}
+
+    # Instead of directly querying for a file, we try to find it
+    # via attachment to an item, so that we can check that the user
+    # has the appropriate permissions for it
+    result = item_collection.aggregate(
+        [
+            {
+                "$match": {
+                    "file_ObjectIds": {"$in": [file_id]},
+                    **get_default_permissions(user_only=False),
+                }
+            },
+            {"$limit": 1},
+            {
+                "$lookup": {
+                    "from": "files",
+                    "localField": "file_ObjectIds",
+                    "foreignField": "_id",
+                    "as": "files",
+                }
+            },
+            {"$project": {"files": 1}},
+        ]
     )
+
+    file_info = (
+        [d for d in next(result)["files"] if str(d["_id"]) == str(file_id)][0] if result else None
+    )
+
     if not file_info:
         raise OSError(f"could not find file with id: {file_id} in db")
 

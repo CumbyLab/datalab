@@ -1,12 +1,14 @@
 import atexit
+import re
 from functools import lru_cache
+from typing import Any
 
-# Must be imported in this way to allow for easy patching with mongomock
 import pymongo
 from flask_pymongo import PyMongo
 from pydantic import BaseModel
 from pymongo.errors import ConnectionFailure
 
+from pydatalab.logger import LOGGER
 from pydatalab.models import ITEM_MODELS
 
 __all__ = (
@@ -16,6 +18,10 @@ __all__ = (
     "_get_active_mongo_client",
     "insert_pydantic_model_fork_safe",
     "ITEMS_FTS_FIELDS",
+    "USERS_FTS_FIELDS",
+    "COLLECTIONS_FTS_FIELDS",
+    "generate_heuristic_regex_search",
+    "build_search_pipeline",
 )
 
 flask_mongo = PyMongo()
@@ -38,6 +44,97 @@ ITEMS_FTS_FIELDS: set[str] = set().union(
         for model in ITEM_MODELS.values()
     )
 )
+
+USERS_FTS_FIELDS: set[str] = {"identities.name", "display_name", "contact_email"}
+"""Fields to search for users."""
+
+COLLECTIONS_FTS_FIELDS: set[str] = {"collection_id", "title", "description"}
+"""Fields to search for collections."""
+
+
+def generate_heuristic_regex_search(
+    query: str, fields: set[str], part_length: int = 4
+) -> dict[str, Any]:
+    """Generate a heuristic regex search object for MongoDB that uses
+    word boundaries for short parts of the query, but allows matches anywhere.
+
+    Parameters:
+        query: The full search query string.
+        fields: Set of field names to search across.
+        part_length: The length below which to add a word boundary to the start of the part.
+
+    Returns:
+        A MongoDB query object that can be used in a $match stage.
+
+    """
+
+    query_parts = [re.escape(part) for part in query.split(" ") if part.strip()]
+
+    query_parts = [f"\\b{part}" if len(part) <= part_length else part for part in query_parts]
+    match_obj = {
+        "$or": [
+            {"$and": [{field: {"$regex": query, "$options": "i"}} for query in query_parts]}
+            for field in fields
+        ]
+    }
+    LOGGER.debug("Performing regex search for %s with full search %s", query_parts, match_obj)
+
+    return match_obj
+
+
+def build_search_pipeline(
+    query: str,
+    fields: set[str],
+    permissions: dict | None,
+) -> list[dict]:
+    """Build a MongoDB aggregation pipeline for search with support for FTS, regex, and heuristic modes.
+
+    Parameters:
+        query: The search query string.
+        fields: Set of field names to search across.
+        permissions: Optional permissions filter to apply.
+
+    Returns:
+        A list of pipeline stages for MongoDB aggregation.
+
+    """
+    pipeline = []
+    match_obj: dict[str, Any]
+
+    if isinstance(query, str):
+        query = query.strip("'")
+
+    if isinstance(query, str) and query.startswith("%"):
+        # Old FTS query style, using MongoDB text indexes
+        query = query.lstrip("%")
+        query = query.strip("'")
+        match_obj = {"$text": {"$search": query}}
+        if permissions:
+            match_obj.update(permissions)
+
+        pipeline.append({"$match": match_obj})
+        pipeline.append({"$sort": {"score": {"$meta": "textScore"}}})
+
+    elif isinstance(query, str) and query.startswith("#"):
+        # Plain regex search, without word boundaries or splitting into parts
+        query = query.lstrip("#")
+        query = query.strip("'")
+
+        match_obj = {"$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]}
+        if permissions:
+            match_obj = {"$and": [permissions, match_obj]}
+
+        pipeline.append({"$match": match_obj})
+
+    else:
+        # Heuristic + regex search, splitting the query into parts and adding word boundaries
+        match_obj = generate_heuristic_regex_search(query, fields)
+        if permissions:
+            match_obj = {"$and": [permissions, match_obj]}
+
+        pipeline.append({"$match": match_obj})
+
+    return pipeline
 
 
 def insert_pydantic_model_fork_safe(model: BaseModel, collection: str) -> str:
@@ -80,7 +177,7 @@ def _get_active_mongo_client(timeoutMS: int = 1000) -> pymongo.MongoClient:
         return client
 
     except ConnectionFailure as exc:
-        LOGGER.critical(f"Unable to connect to MongoDB at {CONFIG.MONGO_URI!r}: {exc}")
+        LOGGER.critical("Unable to connect to MongoDB at %r: %s", CONFIG.MONGO_URI, exc)
         raise RuntimeError from exc
 
 
@@ -117,6 +214,11 @@ def create_default_indices(
         - An index over item type,
         - A unique index over `item_id` and `refcode`.
         - A text index over user names and identities.
+        - Version control indexes:
+            - Index on item_versions.refcode for fast version history lookup
+            - Index on item_versions.user_id for fast user contribution queries
+            - Compound index on (refcode, version) for sorted version history
+            - Unique index on version_counters.refcode for atomic version numbering
 
     Parameters:
         background: If true, indexes will be created as background jobs.
@@ -207,5 +309,59 @@ def create_default_indices(
     except pymongo.errors.OperationFailure:
         db.users.drop_index(user_fts_name)
         ret += create_user_fts()
+
+    group_fts_fields = {"display_name", "description"}
+    group_fts_name = "group full-text search"
+    group_index_name = "unique group identifiers"
+
+    def create_group_index(group_index_name):
+        return db.groups.create_index(
+            "group_id",
+            unique=True,
+            name=group_index_name,
+            background=background,
+        )
+
+    try:
+        ret += create_group_index(group_index_name)
+    except pymongo.errors.OperationFailure:
+        db.users.drop_index(group_index_name)
+        ret += create_group_index(group_index_name)
+
+    def create_group_fts():
+        return db.groups.create_index(
+            [(k, pymongo.TEXT) for k in group_fts_fields],
+            name=group_fts_name,
+            background=background,
+        )
+
+    try:
+        ret += create_group_fts()
+    except pymongo.errors.OperationFailure:
+        db.users.drop_index(group_fts_name)
+        ret += create_group_fts()
+
+    ret += db.export_tasks.create_index(
+        "task_id", unique=True, name="unique task ID", background=background
+    )
+    ret += db.export_tasks.create_index(
+        "creator_id", name="export task creator", background=background
+    )
+    ret += db.export_tasks.create_index(
+        "created_at", name="export task created at", background=background
+    )
+    ret += db.export_tasks.create_index("status", name="export task status", background=background)
+
+    # Version control indexes
+    ret += db.item_versions.create_index("refcode", name="version refcode", background=background)
+    ret += db.item_versions.create_index("user_id", name="version user_id", background=background)
+    ret += db.item_versions.create_index(
+        [("refcode", pymongo.ASCENDING), ("version", pymongo.DESCENDING)],
+        name="refcode and version",
+        background=background,
+    )
+    ret += db.version_counters.create_index(
+        "refcode", unique=True, name="unique refcode counter", background=background
+    )
 
     return ret

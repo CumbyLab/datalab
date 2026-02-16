@@ -318,6 +318,7 @@ def test_echem_block_lifecycle(admin_client, default_sample_dict, example_data_d
     assert response.status_code == 200
     item_data = response.json["item_data"]
     block_data = item_data["blocks_obj"][block_id]
+    block_data["mode"] = "multi"
     block_data["file_ids"] = example_file_ids
 
     response = admin_client.post("/update-block/", json={"block_data": block_data})
@@ -325,19 +326,39 @@ def test_echem_block_lifecycle(admin_client, default_sample_dict, example_data_d
     web_block = response.json["new_block_data"]
 
     assert "bokeh_plot_data" in web_block
+    assert web_block["bokeh_plot_data"] is not None
+    assert web_block.get("errors") is None
+
+    # Update block with comparison files (use single mode + comparison_file_ids)
+    response = admin_client.get(f"/get-item-data/{sample_id}")
+    assert response.status_code == 200
+    item_data = response.json["item_data"]
+    block_data = item_data["blocks_obj"][block_id]
+    block_data["mode"] = "single"
+    block_data["file_ids"] = [example_file_ids[0]]
+    block_data["comparison_file_ids"] = [example_file_ids[1]]
+
+    response = admin_client.post("/update-block/", json={"block_data": block_data})
+    assert response.status_code == 200
+    web_block = response.json["new_block_data"]
+
+    assert "bokeh_plot_data" in web_block
+    assert web_block["bokeh_plot_data"] is not None
     assert web_block.get("errors") is None
 
     # Test for only one file_id
+    block_data["mode"] = "single"
     block_data["file_ids"] = [example_file_ids[0]]
 
     response = admin_client.post("/update-block/", json={"block_data": block_data})
     assert response.status_code == 200
     web_block = response.json["new_block_data"]
     assert "bokeh_plot_data" in web_block
+    assert web_block["bokeh_plot_data"] is not None
     assert web_block.get("errors") is None
 
 
-def test_xrd_block_lifecycle(admin_client, default_sample_dict, example_data_dir):
+def test_xrd_block_lifecycle(admin_client, client, user_id, default_sample_dict, example_data_dir):
     from pydatalab.apps.xrd import XRDBlock
 
     block_type = "xrd"
@@ -349,6 +370,14 @@ def test_xrd_block_lifecycle(admin_client, default_sample_dict, example_data_dir
     response = admin_client.post("/new-sample/", json=sample_data)
     assert response.status_code == 201
     assert response.json["status"] == "success"
+
+    refcode = response.json["sample_list_entry"]["refcode"]
+
+    response = admin_client.patch(
+        f"/items/{refcode}/permissions", json={"creators": [{"immutable_id": str(user_id)}]}
+    )
+
+    assert response.status_code == 200
 
     response = admin_client.post(
         "/add-data-block/",
@@ -396,6 +425,19 @@ def test_xrd_block_lifecycle(admin_client, default_sample_dict, example_data_dir
 
     response = admin_client.post("/update-block/", json={"block_data": block_data})
 
+    web_block = response.json["new_block_data"]
+    assert "bokeh_plot_data" in web_block
+    assert "computed" in web_block
+    assert web_block["wavelength"] == 2.0
+    assert "peak_data" in web_block["computed"]
+    assert "file_id" in web_block
+    assert web_block["file_id"] == file_id
+    assert web_block.get("errors") is None
+
+    # Check a non-admin creator can also see the block
+    response = client.post("/update-block/", json={"block_data": block_data})
+
+    assert "new_block_data" in response.json
     web_block = response.json["new_block_data"]
     assert "bokeh_plot_data" in web_block
     assert "computed" in web_block
@@ -587,6 +629,11 @@ def test_create_sample_with_example_files(
     item_data = response.json["item_data"]
     block_data = item_data["blocks_obj"][block_id]
     block_data["file_id"] = file_id
+
+    # For cycle blocks, need to set mode and file_ids rather than file_id
+    if block_type == "cycle":
+        block_data["mode"] = "single"
+        block_data["file_ids"] = [file_id]
 
     response = admin_client.post("/update-block/", json={"block_data": block_data})
     assert response.status_code == 200

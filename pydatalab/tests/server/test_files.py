@@ -62,19 +62,19 @@ def test_get_file_and_delete(client, default_filepath, default_sample):
     assert response.json["status"] == "success"
     assert response.status_code == 200
 
-    assert "files_data" in response.json
-    assert len(response.json["files_data"]) == 1
-    file_id = [_id for _id in response.json["files_data"]][0]
+    assert "files" in response.json["item_data"]
+    assert len(response.json["item_data"]["files"]) == 1
+    file_id = [f["immutable_id"] for f in response.json["item_data"]["files"]][0]
 
     assert "item_data" in response.json
     assert file_id in response.json["item_data"]["file_ObjectIds"]
 
     assert (
-        response.json["files_data"][file_id]["location"]
+        response.json["item_data"]["files"][0]["location"]
         == f"{CONFIG.FILE_DIRECTORY}/{file_id}/{default_filepath.name}"
     )
-    assert response.json["files_data"][file_id]["name"] == default_filepath.name
-    assert response.json["files_data"][file_id]["size"] == 2465718
+    assert response.json["item_data"]["files"][0]["name"] == default_filepath.name
+    assert response.json["item_data"]["files"][0]["size"] == 2465718
 
     file_response = client.get(f"/files/{file_id}/{default_filepath.name}")
     assert file_response.json is None
@@ -96,7 +96,7 @@ def test_get_file_and_delete(client, default_filepath, default_sample):
     assert response.json["status"] == "success"
     assert response.status_code == 200
     assert not response.json["item_data"]["file_ObjectIds"]
-    assert not response.json["files_data"]
+    assert not response.json["item_data"]["files"]
 
 
 @pytest.mark.dependency(depends=["test_get_file_and_delete"])
@@ -157,9 +157,10 @@ def test_file_permissions(
     client,
     another_client,
     another_user_id,
+    group_id,
     default_filepath,
-    insert_default_sample,
-    default_sample,
+    insert_default_cell,
+    default_cell,
     tmpdir,
 ):  # pylint: disable=unused-argument
     """Upload a file as one user, then test access as two different users."""
@@ -170,7 +171,7 @@ def test_file_permissions(
             buffered=True,
             content_type="multipart/form-data",
             data={
-                "item_id": default_sample.item_id,
+                "item_id": default_cell.item_id,
                 "file": [(f, filename)],
                 "type": "application/octet-stream",
                 "replace_file": "null",
@@ -190,7 +191,7 @@ def test_file_permissions(
 
     # Give the user access to the item, then check again
     # First get refcode for item ID
-    response = client.get(f"/get-item-data/{default_sample.item_id}")
+    response = client.get(f"/get-item-data/{default_cell.item_id}")
     refcode = response.json["item_data"]["refcode"]
 
     # Add normal user to the item
@@ -201,3 +202,53 @@ def test_file_permissions(
     # Now check they have access to the file
     response = another_client.get(f"/files/{file_id}/{filename}")
     assert response.status_code == 200
+
+    # Now remove them, but add their group
+    response = client.patch(
+        f"/items/{refcode}/permissions",
+        json={"creators": [], "groups": [{"immutable_id": group_id}]},
+    )
+
+    # Now check they still have access to the file
+    response = another_client.get(f"/files/{file_id}/{filename}")
+    assert response.status_code == 200
+
+
+def test_file_download_sudo_mode(
+    client,
+    admin_client,
+    default_filepath,
+):
+    """Test that admins need ?sudo=1 to access files owned by other users."""
+    # Create a sample as normal user and upload a file
+    response = client.post("/new-sample/", json={"type": "samples", "item_id": "user-file-sample"})
+    assert response.status_code == 201
+    item_id = response.json["sample_list_entry"]["item_id"]
+
+    filename = "user_owned_file.txt"
+    with open(default_filepath, "rb") as f:
+        response = client.post(
+            "/upload-file/",
+            buffered=True,
+            content_type="multipart/form-data",
+            data={
+                "item_id": item_id,
+                "file": [(f, filename)],
+                "type": "application/octet-stream",
+                "replace_file": "null",
+                "relativePath": "null",
+            },
+        )
+
+    assert response.status_code == 201
+    file_id = response.json["file_id"]
+
+    # Admin without ?sudo=1 cannot access the file
+    response = admin_client.get(f"/files/{file_id}/{filename}")
+    assert response.status_code == 401
+
+    # Admin with ?sudo=1 can access the file
+    response = admin_client.get(f"/files/{file_id}/{filename}?sudo=1")
+    assert response.status_code == 200
+    assert len(response.data) == 2465718
+    response.close()

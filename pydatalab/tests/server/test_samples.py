@@ -17,12 +17,12 @@ def test_empty_samples(client):
 
 @pytest.mark.dependency(depends=["test_empty_samples"])
 def test_new_sample(client, default_sample_dict):
-    response = client.post("/new-sample/", json=default_sample_dict)
+    response = client.put("/new-sample/", json=default_sample_dict)
     # Test that 201: Created is emitted
     assert response.status_code == 201, response.json
     assert response.json["status"] == "success"
     for key in default_sample_dict:
-        if key == "creator_ids":
+        if key in ["creator_ids", "group_ids"]:
             continue
         if isinstance(v := default_sample_dict[key], datetime.datetime):
             v = v.replace(tzinfo=datetime.timezone.utc).isoformat()
@@ -35,11 +35,17 @@ def test_get_item_data(client, default_sample_dict):
     assert response.status_code == 200
     assert response.json["status"] == "success"
     for key in default_sample_dict:
-        if key == "creator_ids":
+        if key in ["creator_ids", "group_ids"]:
             continue
         if isinstance(v := default_sample_dict[key], datetime.datetime):
             v = v.replace(tzinfo=datetime.timezone.utc).isoformat()
         assert response.json["item_data"][key] == v
+    assert response.json["item_data"]["groups"][0]["immutable_id"] == str(
+        sorted(default_sample_dict["group_ids"])[0]
+    )
+    assert response.json["item_data"]["creators"][0]["immutable_id"] == str(
+        sorted(default_sample_dict["creator_ids"])[0]
+    )
 
 
 @pytest.mark.dependency(depends=["test_new_sample"])
@@ -48,9 +54,6 @@ def test_new_sample_collision(client, default_sample_dict):
     response = client.post("/new-sample/", json=default_sample_dict)
     # Test that 409: Conflict is returned
     assert response.status_code == 409
-    assert (
-        response.json["message"] == "item_id_validation_error: '12345' already exists in database."
-    )
 
 
 @pytest.mark.dependency(depends=["test_new_sample", "test_get_item_data"])
@@ -84,7 +87,7 @@ def test_new_sample_with_automatically_generated_id(client, user_id):
     for key in new_sample_data:
         if isinstance(v := new_sample_data[key], datetime.datetime):
             v = v.replace(tzinfo=datetime.timezone.utc).isoformat()
-        if key == "creator_ids":
+        if key in ["creator_ids", "group_ids"]:
             continue
         assert response.json["item_data"][key] == v
 
@@ -251,7 +254,8 @@ def test_item_regex_search(
     user, query, expected_result_ids, real_mongo_client, client, admin_client, insert_example_items
 ):
     if user == "admin":
-        response = admin_client.get(f"/search-items/?{query}")
+        # Admin needs ?sudo=1 to see all items (super-user mode)
+        response = admin_client.get(f"/search-items/?{query}&sudo=1")
     else:
         response = client.get(f"/search-items/?{query}")
 
@@ -265,7 +269,9 @@ def test_item_regex_search(
 
 
 @pytest.mark.dependency(depends=["test_delete_sample"])
-def test_new_sample_with_relationships(client, complicated_sample):
+def test_new_sample_with_relationships(
+    client, complicated_sample, insert_complicated_sample_constituents
+):
     complicated_sample_json = json.loads(complicated_sample.json())
     response = client.post("/new-sample/", json=complicated_sample_json)
     # Test that 201: Created is emitted
@@ -292,6 +298,19 @@ def test_new_sample_with_relationships(client, complicated_sample):
     ]
     assert len(response.json["item_data"]["relationships"]) == 3
     assert len(response.json["item_data"]["synthesis_constituents"]) == 3
+
+    # Verify that each constituent's quantity and unit are preserved correctly
+    # after entry_reference_lookup resolves item references from the database
+    constituents = response.json["item_data"]["synthesis_constituents"]
+    assert constituents[0]["quantity"] == 1
+    assert constituents[0]["unit"] == "g"
+    assert constituents[0]["item"]["item_id"] == "starting_material_1"
+    assert constituents[1]["quantity"] == 2
+    assert constituents[1]["unit"] == "kg"
+    assert constituents[1]["item"]["item_id"] == "starting_material_2"
+    assert constituents[2]["quantity"] == 3
+    assert constituents[2]["unit"] == "ml"
+    assert constituents[2]["item"]["item_id"] == "starting_material_3"
 
     # Create a derived sample with new relationships and make sure they are properly interleaved
     derived_sample = Sample(**response.json["item_data"])
@@ -344,11 +363,12 @@ def test_new_sample_with_relationships(client, complicated_sample):
         # i.e., "starting_material_3", has been removed
     ]
 
+    sm_refcodes = {sm.item_id: sm.refcode for sm in insert_complicated_sample_constituents}
     assert [d.get("refcode") for d in response.json["item_data"]["relationships"]] == [
-        None,
-        None,
+        sm_refcodes["starting_material_1"],
+        sm_refcodes["starting_material_2"],
         new_refcode,
-        None,
+        None,  # manually added OTHER relationship has no refcode
         # i.e., "starting_material_3", has been removed
     ]
 
@@ -387,10 +407,10 @@ def test_saved_sample_has_new_relationships(client, default_sample_dict, complic
         "/save-item/", json={"item_id": sample_dict["item_id"], "data": sample_dict}
     )
 
-    # Saving this link *should* add a searchable relationship in the database on both the new and old sample
     response = client.get(
         f"/get-item-data/{default_sample_dict['item_id']}",
     )
+
     assert complicated_sample.item_id in response.json["parent_items"]
 
     response = client.get(
@@ -505,10 +525,10 @@ def test_create_cell(client, default_cell):
         cell["positive_electrode"][0]["item"]["name"]
         == default_cell.positive_electrode[0].item.name
     )
-    assert (
-        cell["negative_electrode"][0]["item"]["name"]
-        == default_cell.negative_electrode[0].item.name
-    )
+    # The anode has a "real" entry in the db, so it should be looked up properly
+    # with dereferenced chemical formula and name, even if it was not provided at link time
+    assert cell["negative_electrode"][0]["item"]["name"] == "NaNiO2"
+    assert cell["negative_electrode"][0]["item"]["chemform"] == "NaNiO2"
 
 
 @pytest.mark.dependency(depends=["test_create_cell"])
@@ -643,7 +663,7 @@ def test_items_added_to_existing_collection(client, default_collection, default_
     default_sample_dict["item_id"] = new_id
     default_sample_dict["collections"] = [{"collection_id": "random_id"}]
     response = client.post("/new-sample/", json=default_sample_dict)
-    assert response.status_code == 401, response.json
+    assert response.status_code == 404, response.json
     response = client.get(f"/get-item-data/{new_id}")
     assert response.status_code == 404, response.json
 

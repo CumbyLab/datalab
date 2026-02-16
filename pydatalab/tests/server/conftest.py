@@ -1,22 +1,14 @@
 from pathlib import Path
-from unittest.mock import patch
 
-import mongomock
 import pymongo
 import pytest
 from bson import ObjectId
 from flask.testing import FlaskClient
 
-import pydatalab.mongo
 from pydatalab.models import Cell, Collection, Equipment, Sample, StartingMaterial
 from pydatalab.models.people import AccountStatus
 
 TEST_DATABASE_NAME = "__datalab-testing__"
-
-
-class PyMongoMock(mongomock.MongoClient):
-    def init_app(self, _, *args, **kwargs):
-        return super().__init__(MONGO_URI)
 
 
 MONGO_URI = f"mongodb://localhost:27017/{TEST_DATABASE_NAME}"
@@ -63,17 +55,19 @@ def app_config(tmp_path_factory, secret_key):
         "TESTING": False,
         "ROOT_PATH": "/",
         "SECRET_KEY": secret_key,
+        "AUTO_ACTIVATE_ACCOUNTS": False,
+        "EMAIL_AUTO_ACTIVATE_ACCOUNTS": False,
         "EMAIL_AUTH_SMTP_SETTINGS": {
             "MAIL_SERVER": "smtp.example.com",
             "MAIL_PORT": 587,
-            "MAIL_USERNAME": "",
-            "MAIL_PASSWORD": "",
+            "MAIL_USERNAME": "test",
             "MAIL_USE_TLS": True,
             "MAIL_DEFAULT_SENDER": "test@example.org",
         },
         "EMAIL_DOMAIN_ALLOW_LIST": ["example.org", "ml-evs.science"],
         "MAIL_DEBUG": True,
         "MAIL_SUPPRESS_SEND": True,
+        "MAIL_PASSWORD": "test",
         # Set to 10 MB to check that larger files fail; this should be larger than all of our example files.
         # Elsewhere, we can generate an artificial large file to check that it fails.
         "MAX_CONTENT_LENGTH": 10 * 1000**2,
@@ -81,46 +75,30 @@ def app_config(tmp_path_factory, secret_key):
 
 
 @pytest.fixture(scope="module")
-def app(real_mongo_client, monkeypatch_session, app_config):
-    """Yields the test app.
-
-    If it exists, connects to a local MongoDB, otherwise uses the
-    mongomock testing backend.
-
-    """
+def app(real_mongo_client, app_config):
+    """Yields the test app."""
     from pydatalab.main import create_app
+    from pydatalab.mongo import flask_mongo
 
-    try:
-        mongo_cli = real_mongo_client
-        if mongo_cli is None:
-            raise pymongo.errors.ServerSelectionTimeoutError
+    mongo_cli = real_mongo_client
+    if mongo_cli is None:
+        raise pymongo.errors.ServerSelectionTimeoutError(
+            "Tests require a running local MongoDB instance."
+        )
 
-        databases = mongo_cli.list_database_names()
+    databases = mongo_cli.list_database_names()
 
-        if TEST_DATABASE_NAME in databases:
-            mongo_cli.drop_database(TEST_DATABASE_NAME)
+    if TEST_DATABASE_NAME in databases:
+        mongo_cli.drop_database(TEST_DATABASE_NAME)
 
-    except pymongo.errors.ServerSelectionTimeoutError:
-        with patch.object(
-            pydatalab.mongo,
-            "flask_mongo",
-            PyMongoMock(MONGO_URI, connectTimeoutMS=100, serverSelectionTimeoutMS=100),
-        ):
-
-            def mock_mongo_client():
-                return PyMongoMock(MONGO_URI, connectTimeoutMS=100, serverSelectionTimeoutMS=100)
-
-            def mock_mongo_database():
-                return mock_mongo_client().get_database(TEST_DATABASE_NAME)
-
-            monkeypatch_session.setattr(
-                pydatalab.mongo, "_get_active_mongo_client", mock_mongo_client
-            )
-            monkeypatch_session.setattr(pydatalab.mongo, "get_database", mock_mongo_database)
-
-    app = create_app(app_config)
+    app = create_app(app_config, env_file=False)
 
     yield app
+
+    # Explicitly close the flask-pymongo connection
+    if flask_mongo.cx:
+        flask_mongo.cx.close()
+
     if mongo_cli:
         mongo_cli.drop_database(TEST_DATABASE_NAME)
 
@@ -221,6 +199,11 @@ def user_id():
 
 
 @pytest.fixture(scope="session")
+def group_id():
+    yield ObjectId(24 * "2")
+
+
+@pytest.fixture(scope="session")
 def another_user_id():
     yield ObjectId(24 * "7")
 
@@ -240,15 +223,26 @@ def deactivated_user_id():
     yield ObjectId(24 * "3")
 
 
-def insert_user(id, api_key, role, real_mongo_client, status: AccountStatus = AccountStatus.ACTIVE):
+def insert_user(
+    id,
+    api_key,
+    role,
+    real_mongo_client,
+    display_name: str = "Test Admin",
+    status: AccountStatus = AccountStatus.ACTIVE,
+    group_immutable_id: ObjectId | None = None,
+):
     from hashlib import sha512
 
     demo_user = {
         "_id": id,
         "contact_email": "test@example.org",
-        "display_name": "Test Admin",
+        "display_name": display_name,
         "account_status": status,
     }
+    if group_immutable_id is not None:
+        demo_user["groups"] = [{"immutable_id": group_immutable_id}]
+
     real_mongo_client.get_database(TEST_DATABASE_NAME).users.insert_one(demo_user)
     hash = sha512(api_key.encode("utf-8")).hexdigest()
     real_mongo_client.get_database(TEST_DATABASE_NAME).api_keys.insert_one(
@@ -271,15 +265,34 @@ def insert_demo_users(
     unverified_user_id,
     unverified_user_api_key,
     real_mongo_client,
+    group_id,
 ):
-    insert_user(user_id, user_api_key, "user", real_mongo_client)
-    insert_user(another_user_id, another_user_api_key, "user", real_mongo_client)
-    insert_user(admin_user_id, admin_api_key, "admin", real_mongo_client)
+    insert_user(
+        user_id,
+        user_api_key,
+        "user",
+        real_mongo_client,
+        display_name="Test User",
+        group_immutable_id=group_id,
+    )
+    insert_user(
+        another_user_id,
+        another_user_api_key,
+        "user",
+        real_mongo_client,
+        display_name="Another User",
+        group_immutable_id=group_id,
+    )
+    real_mongo_client.get_database(TEST_DATABASE_NAME).groups.insert_one(
+        {"_id": group_id, "display_name": "Demo Group", "group_id": "demo"}
+    )
+    insert_user(admin_user_id, admin_api_key, "admin", real_mongo_client, display_name="Test Admin")
     insert_user(
         deactivated_user_id,
         deactivated_user_api_key,
         "user",
         real_mongo_client,
+        display_name="Deactivated User",
         status=AccountStatus.DEACTIVATED,
     )
     insert_user(
@@ -287,12 +300,13 @@ def insert_demo_users(
         unverified_user_api_key,
         "user",
         real_mongo_client,
+        display_name="Unverified User",
         status=AccountStatus.UNVERIFIED,
     )
 
 
 @pytest.fixture(scope="module", name="default_sample")
-def fixture_default_sample(admin_user_id, user_id):
+def fixture_default_sample(admin_user_id, user_id, group_id):
     return Sample(
         **{
             "item_id": "12345",
@@ -300,12 +314,13 @@ def fixture_default_sample(admin_user_id, user_id):
             "date": "1970-02-01",
             "type": "samples",
             "creator_ids": [admin_user_id, user_id],
+            "group_ids": [group_id],
         }
     )
 
 
 @pytest.fixture(scope="module", name="default_cell")
-def fixture_default_cell():
+def fixture_default_cell(user_id):
     return Cell(
         **{
             "item_id": "test_cell",
@@ -313,12 +328,12 @@ def fixture_default_cell():
             "date": "1970-02-01",
             "negative_electrode": [
                 {
-                    "item": {"item_id": "test", "chemform": "Li15Si4", "type": "samples"},
+                    "item": {"item_id": "test", "type": "starting_materials"},
                     "quantity": 2.0,
                     "unit": "mg",
                 },
                 {
-                    "item": {"item_id": "test", "chemform": "C", "type": "samples"},
+                    "item": {"item_id": "test_carbon", "chemform": "C", "type": "samples"},
                     "quantity": 2.0,
                     "unit": "mg",
                 },
@@ -333,6 +348,7 @@ def fixture_default_cell():
             "electrolyte": [{"item": {"name": "inlined reference"}, "quantity": 100, "unit": "ml"}],
             "cell_format": "swagelok",
             "type": "cells",
+            "creator_ids": [user_id],
         }
     )
 
@@ -435,6 +451,36 @@ def fixture_complicated_sample(user_id):
             "synthesis_description": "Take one gram of sodium and add 2 kg of...sodium, then 3 ml of liquid sodium(??) <i>et voila</i>, you have some real good sodium!",
         }
     )
+
+
+@pytest.fixture(scope="module", name="insert_complicated_sample_constituents")
+def fixture_insert_complicated_sample_constituents(user_id):
+    """Insert the starting materials referenced by complicated_sample into the database
+    so that entry_reference_lookup can resolve them."""
+    from pydatalab.models.utils import generate_unique_refcode
+    from pydatalab.mongo import flask_mongo
+
+    items = []
+    for sm_id, sm_name in [
+        ("starting_material_1", "first Na"),
+        ("starting_material_2", "second Na"),
+        ("starting_material_3", "liquid Na"),
+    ]:
+        sm = StartingMaterial(
+            item_id=sm_id,
+            name=sm_name,
+            chemform="Na",
+            type="starting_materials",
+            creator_ids=[user_id],
+            refcode=generate_unique_refcode(),
+        )
+        flask_mongo.db.items.insert_one(sm.dict(exclude_unset=False))
+        items.append(sm)
+
+    yield items
+
+    for item in items:
+        flask_mongo.db.items.delete_one({"refcode": item.refcode})
 
 
 @pytest.fixture(scope="module")
@@ -580,6 +626,7 @@ def fixture_insert_default_equipment(default_equipment):
 
 @pytest.fixture(scope="module", name="insert_example_items")
 def fixture_insert_example_items(example_items, real_mongo_client):
+    real_mongo_client.get_database(TEST_DATABASE_NAME).items.delete_many({})
     real_mongo_client.get_database().items.insert_many(example_items)
 
 

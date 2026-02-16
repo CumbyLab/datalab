@@ -22,6 +22,11 @@
     <div v-else-if="isPDF" class="pdf-wrapper">
       <iframe v-if="isPDF" :src="media_url" width="100%" height="100%" frameborder="0"></iframe>
     </div>
+    <div v-else-if="isSVG" class="svg-wrapper">
+      <div v-if="svgLoading" class="text-center p-3">Loading SVG...</div>
+      <div v-else-if="svgError" class="text-danger p-3">Error loading SVG: {{ svgError }}</div>
+      <div v-else class="svg-content" v-html="sanitizedSVG"></div>
+    </div>
   </DataBlockBase>
 </template>
 
@@ -30,6 +35,8 @@ import DataBlockBase from "@/components/datablocks/DataBlockBase";
 import FileSelectDropdown from "@/components/FileSelectDropdown";
 import { createComputedSetterForBlockField } from "@/field_utils.js";
 import { API_URL } from "@/resources.js";
+import { fetch_file } from "@/server_fetch_utils.js";
+import DOMPurify from "dompurify";
 
 export default {
   components: {
@@ -46,6 +53,13 @@ export default {
       required: true,
     },
   },
+  data() {
+    return {
+      svgContent: null,
+      svgLoading: false,
+      svgError: null,
+    };
+  },
   computed: {
     file_id: createComputedSetterForBlockField("file_id"),
     all_files() {
@@ -57,13 +71,20 @@ export default {
     blockInfo() {
       return this.$store.state.blocksInfos["media"];
     },
+    adminSuperUserMode() {
+      return this.$store.getters.isAdminSuperUserModeActive;
+    },
     media_url() {
       // If the API has already base64 encoded the image, then use it,
       let b64_encoding = this.block_data["b64_encoded_image"] || null;
       if ((b64_encoding != null && b64_encoding[this.file_id]) || null != null) {
         return `data:image/png;base64,${b64_encoding[this.file_id]}`;
       }
-      return `${API_URL}/files/${this.file_id}/${this.lookup_file_field("name", this.file_id)}`;
+      const baseUrl = `${API_URL}/files/${this.file_id}/${this.lookup_file_field(
+        "name",
+        this.file_id,
+      )}`;
+      return this.adminSuperUserMode ? `${baseUrl}?sudo=1` : baseUrl;
     },
     isPhoto() {
       let extension = this.lookup_file_field("extension", this.file_id);
@@ -86,10 +107,57 @@ export default {
       }
       return extension === ".pdf";
     },
+    isSVG() {
+      let extension = this.lookup_file_field("extension", this.file_id);
+      if (extension) {
+        extension = extension.toLowerCase();
+      }
+      return extension === ".svg";
+    },
+    sanitizedSVG() {
+      if (!this.svgContent) return "";
+      // Configure DOMPurify to allow SVG elements but remove scripts and event handlers
+      return DOMPurify.sanitize(this.svgContent, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+        ADD_TAGS: ["use"], // Allow SVG <use> elements
+        FORBID_TAGS: ["script", "style"], // Explicitly forbid scripts and styles
+        FORBID_ATTR: ["onerror", "onload", "onclick"], // Remove event handlers
+      });
+    },
+  },
+  watch: {
+    file_id: {
+      immediate: true,
+      handler() {
+        if (this.isSVG) {
+          this.loadSVG();
+        }
+      },
+    },
   },
   methods: {
     lookup_file_field(field, file_id) {
       return this.all_files.find((file) => file.immutable_id === file_id)?.[field];
+    },
+    async loadSVG() {
+      if (!this.file_id) {
+        this.svgContent = null;
+        return;
+      }
+
+      this.svgLoading = true;
+      this.svgError = null;
+
+      try {
+        // Fetch SVG with 10MB size limit (default)
+        const response = await fetch_file(this.media_url);
+        this.svgContent = await response.text();
+      } catch (error) {
+        console.error("Error loading SVG:", error);
+        this.svgError = error.message;
+      } finally {
+        this.svgLoading = false;
+      }
     },
   },
 };
@@ -121,5 +189,28 @@ video {
   height: 600px;
   overflow: auto;
   display: inline-block;
+}
+
+.svg-wrapper {
+  resize: both;
+  height: 600px;
+  overflow: auto;
+  display: inline-block;
+  width: 100%;
+}
+
+.svg-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.svg-content :deep(svg) {
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  width: auto;
 }
 </style>

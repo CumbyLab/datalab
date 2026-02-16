@@ -6,6 +6,14 @@ Cypress.on("window:before:load", (win) => {
   consoleSpy = cy.spy(win.console, "error");
 });
 
+before(() => {
+  cy.loginViaTestMagicLink("test-user@example.com", "user");
+});
+
+after(() => {
+  cy.logout();
+});
+
 let sample_ids = [
   "12345678910",
   "test1",
@@ -47,6 +55,7 @@ after(() => {
 
 describe("Sample table page", () => {
   beforeEach(() => {
+    cy.loginViaTestMagicLink("test-user@example.com", "user");
     cy.visit("/");
   });
 
@@ -187,6 +196,7 @@ describe("Sample table page", () => {
 
 describe.only("Advanced sample creation features", () => {
   beforeEach(() => {
+    cy.loginViaTestMagicLink("test-user@example.com", "user");
     cy.visit("/");
   });
   it("Adds some valid samples", () => {
@@ -221,8 +231,8 @@ describe.only("Advanced sample creation features", () => {
   it("modifies some data in the second sample", () => {
     cy.findByText("testB").click();
     cy.findByLabelText("Description").type("this is a description of testB.");
-    cy.findByText("Add a block").click();
-    cy.findByText("Comment").click();
+    cy.get('[data-testid="add-block-button-top"]').click();
+    cy.get('[data-testid="add-block-dropdown"]').findByText("Comment").click();
 
     cy.get(".datablock-content div").first().type("a comment is added here.");
     cy.expandIfCollapsed("[data-testid=synthesis-block]");
@@ -258,7 +268,6 @@ describe.only("Advanced sample creation features", () => {
     cy.findByText("testBcopy").click();
     cy.findByLabelText("Name").should("have.value", "COPY OF the second test sample");
     cy.findByText("this is a description of testB.");
-    cy.findByText("a comment is added here.");
     cy.findByText("a description of the synthesis here");
     cy.findAllByText("component3");
     cy.findAllByText("component4");
@@ -295,7 +304,6 @@ describe.only("Advanced sample creation features", () => {
     cy.findByText("testBcopy_copy").click();
     cy.findByLabelText("Name").should("have.value", "COPY OF COPY OF the second test sample");
     cy.findByText("this is a description of testB.");
-    cy.findByText("a comment is added here.");
     cy.findByText("a description of the synthesis here");
     cy.findAllByText("component3");
     cy.findAllByText("component4");

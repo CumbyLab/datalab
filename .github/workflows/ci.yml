@@ -8,7 +8,7 @@ on:
 
 env:
   FORCE_COLOR: true
-  UV_VERSION: "0.8.4"
+  UV_VERSION: "0.9.21"
 
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
@@ -20,15 +20,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
@@ -61,13 +61,13 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # tests need an unshallowed version of the repository to check the version
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -76,7 +76,7 @@ jobs:
           wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.9.0.deb && sudo apt install ./mongodb-database-tools-*-100.9.0.deb
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           working-directory: "./pydatalab"
@@ -90,7 +90,7 @@ jobs:
       - name: Run all tests
         working-directory: ./pydatalab
         run: |
-          uv run pytest -rs -vvv ./tests
+          uv run pytest -rs --cov=pydatalab --cov-report=term --cov-report=xml -vvv ./tests
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.10' && github.repository == 'datalab-org/datalab'
@@ -103,10 +103,10 @@ jobs:
     name: Test the app build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         env:
           FORCE_COLOR: 0
         with:
@@ -122,6 +122,86 @@ jobs:
         working-directory: ./webapp
         run: yarn build
 
+  plugins:
+    name: Test plugin builds
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+          working-directory: "./pydatalab"
+
+      - name: Clone and mount template plugin to test local plugin installation
+        working-directory: ./pydatalab
+        run: |
+          mkdir -p plugins
+
+          # Initialise copier with default/dummy options
+          uvx copier@9.8.0 copy -l \
+            -d author_email=test@test.com  \
+            -d author_fullname=test \
+            -d project_name=datalab-app-plugin-template \
+            -d repository_namespace=datalab-org \
+            "https://github.com/datalab-org/datalab-app-plugin-template" \
+            plugins/datalab-app-plugin-template
+
+          # Temporarily add plugin as an extra dev dep to the pyproject.toml
+          # Find the pyproject line that says "dev-dependencies" and append after it
+          sed -i '/app-plugins-git/a\ \ \ \ "datalab-app-plugin-template",' pyproject.toml
+          sed -i '/\[tool\.uv\.sources\]/a\datalab-app-plugin-template = { path = "./plugins/datalab-app-plugin-template"}' pyproject.toml
+          cat pyproject.toml
+
+      - name: Relock uv.lock file with extra plugin
+        working-directory: ./pydatalab
+        run: |
+          uv lock -P datalab-app-plugin-template
+
+      - name: Set some environment variables for CI containers pre-build
+        run: |
+          echo "PYDATALAB_TESTING=true" >> .env
+          echo "PYDATALAB_TESTING=true" >> pydatalab/.env
+
+      - name: Build Docker images
+        uses: docker/bake-action@v6
+        with:
+          files: docker-compose.yml
+          load: true
+          source: .
+          targets: 'api'
+          set: |
+            api.cache-from=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-api
+            api.cache-from=type=gha,scope=main-${{ matrix.browser-backend }}-build-api
+            api.args.SETUPTOOLS_SCM_PRETEND_VERSION=0.11.11-rc.8
+            api.tags=datalab-api:latest
+
+      - name: Start services
+        run: |
+          # Launch production container profiles and wait for them to come up
+          if ! docker compose up api --force-recreate -d --wait; then
+            echo "=== Docker compose startup failed ==="
+            echo "=== Container logs: ==="
+            docker compose logs database api app
+            echo "=== Container status: ==="
+            docker compose ps database api app
+            exit 1
+          fi
+
+      - name: Test that plugin is loaded
+        run: |
+          # Test that plugin block is listed in info endpoint
+          curl -s http://localhost:5000/info/blocks | jq '.data | any(.id == "example")'
+
   e2e:
     name: e2e tests
     runs-on: ubuntu-latest
@@ -132,7 +212,7 @@ jobs:
         browser-backend: ["electron", "chrome"] # , "firefox"]  # Temporarily disable Firefox until migration to Cypress v14 (https://github.com/datalab-org/datalab/issues/1289)
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -168,7 +248,14 @@ jobs:
       - name: Start services
         run: |
           # Launch production container profiles and wait for them to come up
-          docker compose up database api app --no-build --force-recreate -d --wait
+          if ! docker compose up database api app --no-build --force-recreate -d --wait; then
+            echo "=== Docker compose startup failed ==="
+            echo "=== Container logs: ==="
+            docker compose logs database api app
+            echo "=== Container status: ==="
+            docker compose ps database api app
+            exit 1
+          fi
 
       - name: Run end-to-end tests
         uses: cypress-io/github-action@v6
