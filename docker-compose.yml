@@ -33,6 +33,7 @@ services:
     volumes:
       - ./logs:/logs
       - /data/files:/app/files
+      - /data_sources:/mounted_data_sources:ro
       - /tmp/eln-exports:/tmp/eln-exports
       - /data/backups:/tmp/datalab-backups
     ports:
