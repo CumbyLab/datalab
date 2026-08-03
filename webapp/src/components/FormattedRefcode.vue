@@ -13,12 +13,11 @@
     @click.exact="enableClick ? openEditPageInNewTab() : null"
     @click.meta.stop="enableModifiedClick ? openEditPageInNewTab() : null"
     @click.ctrl.stop="enableModifiedClick ? openEditPageInNewTab() : null"
-    @auxclick.middle.stop="enableModifiedClick ? openEditPageInNewTab() : null"
   >
     {{ refcode }}
   </span>
   <div v-if="enableQRCode">
-    <QRCodeModal v-model="QRCodeModalOpen" :refcode="refcode" />
+  <QRCodeModal v-model="QRCodeModalOpen" :refcode="refcode" :name="name" :chemform="chemform" />
   </div>
 </template>
 
@@ -33,6 +32,14 @@ export default {
     refcode: {
       type: String,
       required: true,
+    },
+    name: {
+      type: String,
+      default: '',
+    },
+    chemform: {
+      type: String,
+      default: '',
     },
     enableClick: {
       type: Boolean,
