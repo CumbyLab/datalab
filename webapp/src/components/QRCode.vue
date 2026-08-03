@@ -97,42 +97,19 @@
       <div class="mt-2">
         <small><strong>Created:</strong> {{ formattedCreationDate }}</small>
       </div>
-
-      <button
-        class="btn btn-warning w-100"
-        :disabled="isGenerating"
-        @click.prevent="generatePublicQRCode()"
-      >
-        <span v-if="isGenerating">
-          <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-          Generating...
-        </span>
-        <span v-else-if="hasExistingToken"> <i class="fas fa-plus me-2"></i>Generate New Token </span>
-        <span v-else> <i class="fas fa-unlock me-2"></i>Generate Public QR Code </span>
-      </button>
     </div>
 
-    <div v-else class="mt-3">
-      <div class="alert alert-warning">
-        <strong><i class="fas fa-exclamation-triangle me-2"></i>Public QR Code Active</strong><br />
-        This QR code can be accessed by anyone with the link. No authentication required.
-        <div class="mt-2">
-          <small><strong>Created:</strong> {{ formattedCreationDate }}</small>
-        </div>
-      </div>
-
-      <button
-        class="btn btn-danger w-100"
-        :disabled="isInvalidating"
-        @click.stop.prevent="invalidateToken"
-      >
-        <span v-if="isInvalidating">
-          <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-          Deleting...
-        </span>
-        <span v-else> <i class="fas fa-trash me-1"></i>Delete Token </span>
-      </button>
-    </div>
+    <button
+      class="btn btn-danger w-100"
+      :disabled="isInvalidating"
+      @click.stop.prevent="invalidateToken"
+    >
+      <span v-if="isInvalidating">
+        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+        Deleting...
+      </span>
+      <span v-else> <i class="fas fa-trash me-1"></i>Delete Token </span>
+    </button>
   </div>
 
   <div v-if="errorMessage" class="alert alert-danger mt-3">
@@ -147,7 +124,6 @@
     Visit <a :href="federationQRCodeUrl">{{ federationQRCodeUrl }}</a> to learn about persistent URL
     resolution in <i>datalab</i>.
   </div>
-  -->
 </template>
 
 <script>
@@ -171,10 +147,6 @@ export default {
       type: Number,
       default: 200,
     },
-    showTokenManagement: {
-      type: Boolean,
-      default: false,
-    },
   },
   emits: ["public-token-generated", "public-token-invalidated"],
   data() {
@@ -196,11 +168,9 @@ export default {
     },
     privateQRCodeUrl() {
       if (QR_CODE_RESOLVER_URL == null) {
-        // return API_URL + "/items/" + this.refcode + "?redirect-to-ui=true";
-        return this.refcode;
+        return API_URL + "/items/" + this.refcode + "?redirect-to-ui=true";
       }
-      //return QR_CODE_RESOLVER_URL + "/" + this.refcode;
-      return this.refcode;
+      return QR_CODE_RESOLVER_URL + "/" + this.refcode;
     },
     publicQRCodeUrl() {
       if (!this.publicToken) return this.privateQRCodeUrl;
