@@ -8,7 +8,8 @@ on:
 
 env:
   FORCE_COLOR: true
-  UV_VERSION: "0.9.21"
+  UV_VERSION: "0.11.8"
+  NODE_VERSION: "22.22"
 
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
@@ -20,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v6
@@ -61,7 +62,7 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           # tests need an unshallowed version of the repository to check the version
           fetch-depth: 0
@@ -94,7 +95,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.10' && github.repository == 'datalab-org/datalab'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: datalab-org/datalab
@@ -103,14 +104,14 @@ jobs:
     name: Test the app build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Node
         uses: actions/setup-node@v6
         env:
           FORCE_COLOR: 0
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: "yarn"
           cache-dependency-path: ./webapp/yarn.lock
 
@@ -127,13 +128,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -143,9 +144,10 @@ jobs:
           working-directory: "./pydatalab"
 
       - name: Clone and mount template plugin to test local plugin installation
-        working-directory: ./pydatalab
         run: |
-          mkdir -p plugins
+          mkdir -p pydatalab/plugins
+
+          cp .github/workflows/plugins.ci-template.toml plugins.toml
 
           # Initialise copier with default/dummy options
           uvx copier@9.8.0 copy -l \
@@ -154,18 +156,8 @@ jobs:
             -d project_name=datalab-app-plugin-template \
             -d repository_namespace=datalab-org \
             "https://github.com/datalab-org/datalab-app-plugin-template" \
-            plugins/datalab-app-plugin-template
+            pydatalab/plugins/datalab-app-plugin-template
 
-          # Temporarily add plugin as an extra dev dep to the pyproject.toml
-          # Find the pyproject line that says "dev-dependencies" and append after it
-          sed -i '/app-plugins-git/a\ \ \ \ "datalab-app-plugin-template",' pyproject.toml
-          sed -i '/\[tool\.uv\.sources\]/a\datalab-app-plugin-template = { path = "./plugins/datalab-app-plugin-template"}' pyproject.toml
-          cat pyproject.toml
-
-      - name: Relock uv.lock file with extra plugin
-        working-directory: ./pydatalab
-        run: |
-          uv lock -P datalab-app-plugin-template
 
       - name: Set some environment variables for CI containers pre-build
         run: |
@@ -173,16 +165,18 @@ jobs:
           echo "PYDATALAB_TESTING=true" >> pydatalab/.env
 
       - name: Build Docker images
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@v7
         with:
           files: docker-compose.yml
           load: true
           source: .
           targets: 'api'
           set: |
-            api.cache-from=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-api
-            api.cache-from=type=gha,scope=main-${{ matrix.browser-backend }}-build-api
-            api.args.SETUPTOOLS_SCM_PRETEND_VERSION=0.11.11-rc.8
+            api.cache-from=type=gha,scope=${{ github.ref_name }}-build-api
+            api.cache-from=type=gha,scope=main-build-api
+            api.cache-to=type=gha,scope=${{ github.ref_name }}-build-api,mode=max
+            api.args.SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+ci
+            api.args.WEB_CONCURRENCY=1
             api.tags=datalab-api:latest
 
       - name: Start services
@@ -212,10 +206,22 @@ jobs:
         browser-backend: ["electron", "chrome"] # , "firefox"]  # Temporarily disable Firefox until migration to Cypress v14 (https://github.com/datalab-org/datalab/issues/1289)
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        env:
+          FORCE_COLOR: 0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "yarn"
+          cache-dependency-path: ./webapp/yarn.lock
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Set some environment variables for CI containers pre-build
         run: |
@@ -224,23 +230,25 @@ jobs:
           echo "PYDATALAB_TESTING=true" >> pydatalab/.env
 
       - name: Build Docker images
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@v7
         with:
           files: docker-compose.yml
           load: true
           source: .
           targets: 'app,api,database'
           set: |
-            app.cache-from=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-app
-            app.cache-from=type=gha,scope=main-${{ matrix.browser-backend }}-build-app
-            api.cache-from=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-api
-            api.cache-from=type=gha,scope=main-${{ matrix.browser-backend }}-build-api
-            database.cache-from=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-database
-            database.cache-from=type=gha,scope=main-${{ matrix.browser-backend }}-build-database
-            api.cache-to=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-api,mode=max
-            app.cache-to=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-app,mode=max
-            database.cache-to=type=gha,scope=${{ github.ref_name }}-${{ matrix.browser-backend }}-build-database,mode=max
-            api.args.SETUPTOOLS_SCM_PRETEND_VERSION=0.11.11-rc.8
+            app.cache-from=type=gha,scope=${{ github.ref_name }}-build-app
+            app.cache-from=type=gha,scope=main-build-app
+            api.cache-from=type=gha,scope=${{ github.ref_name }}-build-api
+            api.cache-from=type=gha,scope=main-build-api
+            database.cache-from=type=gha,scope=${{ github.ref_name }}-build-database
+            database.cache-from=type=gha,scope=main-build-database
+            api.cache-to=type=gha,scope=${{ github.ref_name }}-build-api,mode=max
+            app.cache-to=type=gha,scope=${{ github.ref_name }}-build-app,mode=max
+            database.cache-to=type=gha,scope=${{ github.ref_name }}-build-database,mode=max
+            api.args.SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+ci
+            api.args.WEB_CONCURRENCY=1
+            app.args.VUE_APP_GIT_VERSION=0.0.0+ci
             app.tags=datalab-app:latest
             api.tags=datalab-api:latest
             database.tags=datalab-database:latest
@@ -258,7 +266,7 @@ jobs:
           fi
 
       - name: Run end-to-end tests
-        uses: cypress-io/github-action@v6
+        uses: cypress-io/github-action@v7
         with:
           config: baseUrl=http://localhost:8081
           working-directory: ./webapp
@@ -268,12 +276,35 @@ jobs:
         env:
           CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
 
+  component:
+    # Cypress component tests don't need the datalab stack — they exercise Vue
+    # components in isolation. Splitting them out means they run in parallel
+    # with the e2e job instead of serially after it.
+    name: Component tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        browser-backend: ["electron", "chrome"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        env:
+          FORCE_COLOR: 0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "yarn"
+          cache-dependency-path: ./webapp/yarn.lock
+
       - name: Run component tests
-        uses: cypress-io/github-action@v6
+        uses: cypress-io/github-action@v7
         with:
           working-directory: ./webapp
           record: ${{ github.repository == 'datalab-org/datalab' }}
-          install: false
           component: true
           publish-summary: false
           browser: ${{ matrix.browser-backend }}

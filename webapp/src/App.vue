@@ -5,20 +5,18 @@
 
 <script>
 import DialogContainer from "@/components/DialogContainer.vue";
-import { getApiConfig, loadItemSchemas } from "@/server_fetch_utils.js";
+import { getApiConfig, loadItemSchemas, getBlocksInfos } from "@/server_fetch_utils.js";
 
 export default {
   components: {
     DialogContainer,
   },
   async created() {
-    // Wait for the router to resolve the initial route before loading schemas,
-    // so that redirect-only routes (e.g., /files/*) can navigate away
-    // without triggering unnecessary API requests.
     await this.$router.isReady();
     if (this.$route.name === "files-redirect") return;
     await loadItemSchemas();
     await getApiConfig();
+    await getBlocksInfos();
   },
 };
 </script>
@@ -38,7 +36,7 @@ body {
 @import url("https://fonts.googleapis.com/css?family=Roboto+Mono");
 
 :root {
-  --font-primary: Figtree, Avenir, Arial, sans-serif;
+  --font-primary: var(--custom-font-family, Figtree), Figtree, Avenir, Arial, sans-serif;
   --font-monospace: "Roboto Mono", monospace;
 }
 

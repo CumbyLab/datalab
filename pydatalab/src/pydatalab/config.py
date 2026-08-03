@@ -198,6 +198,11 @@ class ServerConfig(BaseSettings):
         description="Whether the Flask app is being deployed behind a reverse proxy. If `True`, the reverse proxy middleware described in the [Flask docs](https://flask.palletsprojects.com/en/2.2.x/deploying/proxy_fix/) will be attached to the app.",
     )
 
+    USE_X_ACCEL_REDIRECT: bool = Field(
+        False,
+        description="Whether to offload large file/export downloads to the reverse proxy via the `X-Accel-Redirect` header rather than streaming them through a Flask worker. Requires an **nginx** proxy with a matching `internal` location; leave `False` for other proxies (Caddy, traefik) or when running without a proxy.",
+    )
+
     GITHUB_ORG_ALLOW_LIST: list[str] | None = Field(
         [],
         description="A list of GitHub organization IDs (available from `https://api.github.com/orgs/<org_name>`, and are immutable) or organisation names (which can change, so be warned), that the membership of which will be required to register a new datalab account. Setting the value to `None` will allow any GitHub user to register an account.",
@@ -205,16 +210,6 @@ class ServerConfig(BaseSettings):
 
     DEPLOYMENT_METADATA: DeploymentMetadata | None = Field(
         None, description="A dictionary containing metadata to serve at `/info`."
-    )
-
-    ORCID_AUTO_ACTIVATE_ACCOUNTS: bool = Field(
-        False,
-        description="Whether to automatically activate accounts created via ORCID registration.",
-    )
-
-    GITHUB_AUTO_ACTIVATE_ACCOUNTS: bool = Field(
-        False,
-        description="Whether to automatically activate accounts created via GitHub registration.",
     )
 
     EMAIL_AUTO_ACTIVATE_ACCOUNTS: bool = Field(
@@ -249,6 +244,11 @@ its importance when deploying a datalab instance.""",
     MAX_BATCH_CREATE_SIZE: int = Field(
         10_000,
         description="Maximum number of items that can be created in a single batch operation.",
+    )
+
+    ASYNC_BLOCK_TYPES: list[str] = Field(
+        [],
+        description="A list of block type slugs (e.g. ['cycle', 'xrd']) that should be processed asynchronously via the task queue. Defaults to no blocks.",
     )
 
     BACKUP_STRATEGIES: dict[str, BackupStrategy] | None = Field(

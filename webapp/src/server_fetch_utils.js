@@ -62,6 +62,57 @@ export function construct_headers(additional_headers = null) {
   return headers;
 }
 
+function pollBlockStatus(item_id, block_id, task_id) {
+  let attempt = 0;
+
+  async function poll() {
+    attempt++;
+    const delay = attempt <= 5 ? 1000 : 10000;
+
+    try {
+      const response = await fetch_get(`${API_URL}/blocks/${task_id}/status`);
+
+      if (response.stages && response.stages.length > 0) {
+        store.commit("setBlockInfo", {
+          block_id,
+          info: response.stages,
+        });
+      }
+
+      if (response.status === "ready") {
+        if (response.block_data) {
+          store.commit("updateBlockData", {
+            item_id: item_id,
+            block_id: block_id,
+            block_data: response.block_data,
+          });
+          store.commit("setBlockSaved", { block_id: block_id, isSaved: true });
+        } else {
+          store.commit("setBlockError", {
+            block_id,
+            error: "Block processing completed but no data was returned.",
+          });
+        }
+        store.commit("setBlockNotUpdating", block_id);
+        store.commit("setBlockInfo", { block_id, info: null });
+      } else if (response.status === "error") {
+        store.commit("setBlockNotUpdating", block_id);
+        store.commit("setBlockError", {
+          block_id,
+          error: response.error_message || "Block processing failed.",
+        });
+      } else {
+        setTimeout(poll, delay);
+      }
+    } catch (error) {
+      store.commit("setBlockNotUpdating", block_id);
+      store.commit("setBlockError", { block_id, error: String(error) });
+    }
+  }
+
+  setTimeout(poll, 1000);
+}
+
 // eslint-disable-next-line no-unused-vars
 function fetch_get(url) {
   // If admin super-user mode is enabled, append sudo=1
@@ -261,18 +312,28 @@ export function createNewSamples(
   });
 }
 
-export function createNewCollection(collection_id, title = "", startingData = {}, copyFrom = null) {
+export async function createNewCollection(
+  collection_id,
+  title,
+  startingMembers,
+  groups = null,
+  additionalCreators = null,
+) {
+  const starting_members_json = startingMembers
+    ? startingMembers.map((x) => ({ item_id: x.item_id, type: x.type }))
+    : [];
+
   return fetch_put(`${API_URL}/collections`, {
-    copy_from_collection_id: copyFrom,
     data: {
       collection_id: collection_id,
       title: title,
-      type: "collections",
-      ...startingData,
+      starting_members: starting_members_json,
+      groups: groups,
+      additional_creators: additionalCreators,
     },
   }).then(function (response_json) {
-    store.commit("prependToCollectionList", response_json.data);
-    return "success";
+    store.commit("addCollectionToCollectionList", response_json.data);
+    return response_json;
   });
 }
 
@@ -790,25 +851,36 @@ export async function updateBlockFromServer(item_id, block_id, block_data, event
     event_data: event_data,
   })
     .then(function (response_json) {
-      store.commit("updateBlockData", {
-        item_id: item_id,
-        block_id: block_id,
-        block_data: response_json.new_block_data,
-      });
-      store.commit("setBlockNotUpdating", block_id);
-      store.commit("setBlockSaved", {
-        block_id: block_id,
-        isSaved: response_json.saved_successfully,
-      });
-      store.commit("setBlockError", { block_id, error: "" });
+      if (response_json.processing_async) {
+        store.commit("setBlockProcessing", { block_id, task_id: response_json.task_id });
+        pollBlockStatus(item_id, block_id, response_json.task_id);
+      } else {
+        store.commit("updateBlockData", {
+          item_id: item_id,
+          block_id: block_id,
+          block_data: response_json.new_block_data,
+        });
+        store.commit("setBlockNotUpdating", block_id);
+        store.commit("setBlockSaved", {
+          block_id: block_id,
+          isSaved: response_json.saved_successfully,
+        });
+        store.commit("setBlockError", { block_id, error: "" });
+      }
     })
     .catch((error) => {
       // The block component renders errors, so no need to make a dialog here.
       store.commit("setBlockNotUpdating", block_id);
-      if (error && !error.includes("Invalid block type")) {
+
+      const errorMessage = error?.message || String(error);
+
+      if (errorMessage.includes("Invalid block type")) {
         // Do not set any error message for NotImplemented as this will be handled elsewhere
-        store.commit("setBlockError", { block_id, error: error });
+        return;
       }
+
+      store.commit("setBlockError", { block_id, error: errorMessage });
+      throw error;
     });
 }
 
@@ -869,6 +941,31 @@ export function appendItemPermissions(refcode, creators = null, groups = null) {
       }
     },
   );
+}
+
+export function updateCollectionPermissions(collection_id, creators = null, groups = null) {
+  console.log("updateCollectionPermissions called with", collection_id, creators, groups);
+
+  const payload = { creators: creators, groups: groups };
+
+  return fetch_patch(`${API_URL}/collections/${collection_id}/permissions`, payload)
+    .then(function (response_json) {
+      if (response_json.status === "error") {
+        DialogService.error({
+          title: "Permission update failed",
+          message: `Failed to update permissions for collection ${collection_id}: ${response_json.message}`,
+        });
+        throw new Error(response_json.message);
+      }
+      return response_json;
+    })
+    .catch((error) => {
+      DialogService.error({
+        title: "Collection Permissions Update Failed",
+        message: `Error updating collection permissions: ${error}`,
+      });
+      throw error;
+    });
 }
 
 export function saveItem(item_id) {
@@ -1228,19 +1325,24 @@ export async function getSchema(type) {
     });
 }
 
+export async function ensureItemSchema(type) {
+  // Fetch the schema for a given item type only if it isn't already in the
+  // Vuex store.
+  if (!type || store.state.schemas[type]) return;
+  try {
+    const schema = await getSchema(type);
+    store.commit("setSchema", { type, schema });
+  } catch (error) {
+    console.error(`Failed to load schema for ${type}:`, error);
+  }
+}
+
 export async function loadItemSchemas() {
-  // Load schemas for all item types and store them in the Vuex store
+  // Load schemas for every supported item type, skipping any already cached
+  // in the Vuex store.
   try {
     const supportedTypes = await getSupportedSchemasList();
-
-    for (const typeInfo of supportedTypes) {
-      try {
-        const schema = await getSchema(typeInfo.id);
-        store.commit("setSchema", { type: typeInfo.id, schema });
-      } catch (error) {
-        console.error(`Failed to load schema for ${typeInfo.id}:`, error);
-      }
-    }
+    await Promise.all(supportedTypes.map((typeInfo) => ensureItemSchema(typeInfo.id)));
   } catch (error) {
     console.error("Failed to get supported schemas list:", error);
   }
@@ -1406,6 +1508,23 @@ export async function compareItemVersions(refcode, baseVersion, targetVersion) {
         title: "Version Comparison Failed",
         message: `Error comparing versions for ${refcode}: ${error}`,
       });
+      throw error;
+    });
+}
+
+export function invalidateToken(refcode) {
+  return fetch_post(`${API_URL}/items/${refcode}/invalidate-access-token`, {
+    token: "admin-invalidation",
+  })
+    .then(function (response_json) {
+      if (response_json.status !== "success") {
+        throw new Error(
+          "Failed to invalidate token: " + (response_json.detail || response_json.message),
+        );
+      }
+      return response_json;
+    })
+    .catch(function (error) {
       throw error;
     });
 }

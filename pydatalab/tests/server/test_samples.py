@@ -65,6 +65,9 @@ def test_new_sample_with_automatically_generated_id(client, user_id):
         "type": "samples",
         "synthesis_description": "2 parts hydrogen were added to 1 part oxygen",
         "creator_ids": [user_id],
+        "CAS": "7732-18-5",
+        "inchi_key": "XLYOFNOQVPJJNP-UHFFFAOYSA-N",
+        "smiles": "O",
     }
 
     request_json = dict(
@@ -83,6 +86,7 @@ def test_new_sample_with_automatically_generated_id(client, user_id):
     assert response.status_code == 200
     assert response.json["status"] == "success"
     assert response.json["item_data"]["refcode"].split(":")[1] == created_item_id
+    assert response.json["item_data"]["molar_mass"] == 18.01528
 
     for key in new_sample_data:
         if isinstance(v := new_sample_data[key], datetime.datetime):
@@ -374,7 +378,9 @@ def test_new_sample_with_relationships(
 
 
 @pytest.mark.dependency(depends=["test_new_sample_with_relationships"])
-def test_saved_sample_has_new_relationships(client, default_sample_dict, complicated_sample):
+def test_saved_sample_has_new_relationships(
+    client, default_sample_dict, complicated_sample, database
+):
     """Create a sample, add a constituent and save it, then make sure
     it appears in relationship searches, without manually using the Sample
     model to populate them.
@@ -411,7 +417,19 @@ def test_saved_sample_has_new_relationships(client, default_sample_dict, complic
         f"/get-item-data/{default_sample_dict['item_id']}",
     )
 
+    complicated_sample_refcode = database.items.find_one({"item_id": complicated_sample.item_id})[
+        "refcode"
+    ]
+
     assert complicated_sample.item_id in response.json["parent_items"]
+    assert (
+        response.json["item_data"]["synthesis_constituents"][0]["item"]["item_id"]
+        == complicated_sample.item_id
+    )
+    assert (
+        response.json["item_data"]["synthesis_constituents"][0]["item"]["refcode"]
+        == complicated_sample_refcode
+    )
 
     response = client.get(
         f"/get-item-data/{complicated_sample.item_id}",
@@ -717,8 +735,20 @@ def test_items_added_to_existing_collection(client, default_collection, default_
     default_sample_dict["collections"] = [
         {"collection_id": "test_collection_3"},
     ]
+
     response = client.post("/save-item/", json={"data": default_sample_dict, "item_id": new_id2})
-    assert response.status_code == 401, response.json
+    assert response.status_code == 200, response.json
+
+    response = client.get(f"/get-item-data/{new_id2}")
+    assert response.status_code == 200, response.json
+    assert "test_collection_2" in [
+        d["collection_id"] for d in response.json["item_data"]["collections"]
+    ], (
+        "Existing accessible collection should be preserved when user tries to add non-existent collection"
+    )
+    assert len(response.json["item_data"]["collections"]) == 1, (
+        "Should only have the one existing collection"
+    )
 
     # Check that sending same collection multiple times doesn't lead to duplicates
     default_sample_dict["item_id"] = new_id2
@@ -1090,3 +1120,114 @@ def test_copy_sample_without_copying_collections(client, default_sample_dict, de
     child_items = response.json["child_items"]
     assert not any(item["item_id"] == "copy_without_collection" for item in child_items)
     assert any(item["item_id"] == "original_in_collection" for item in child_items)
+
+
+@pytest.mark.dependency(depends=["test_copy_sample_without_copying_collections"])
+def test_collections_permissions(client, admin_client, default_sample_dict, default_collection):
+    new_sample = default_sample_dict.copy()
+    new_sample["item_id"] = "permissions_test_sample"
+    new_sample["collections"] = []
+
+    response = client.post("/new-sample/", json=new_sample)
+    assert response.status_code == 201
+    assert response.json["status"] == "success"
+    refcode = response.json["sample_list_entry"]["refcode"]
+
+    admin_collection = default_collection.dict().copy()
+    admin_collection["collection_id"] = "admin_only_collection"
+    response = admin_client.put("/collections", json={"data": admin_collection})
+
+    response = admin_client.post(
+        "/collections/admin_only_collection", json={"data": {"refcodes": [refcode]}}
+    )
+    assert response.status_code == 200, response.json
+
+    response = admin_client.get(f"/items/{refcode}?sudo=1")
+    assert response.status_code == 200
+    assert response.json["status"] == "success"
+    assert response.json["item_data"]["collections"][0]["collection_id"] == "admin_only_collection"
+    assert len(response.json["item_data"]["relationships"]) == 1
+
+    response = client.get(f"/items/{refcode}")
+    assert response.status_code == 200
+    assert response.json["status"] == "success"
+    assert response.json["item_data"]["collections"] == []
+
+    response = client.post(
+        "/save-item/",
+        json={"item_id": new_sample["item_id"], "data": {"description": "Updated description"}},
+    )
+    assert response.status_code == 200
+    assert response.json["status"] == "success"
+
+    response = client.get(f"/items/{refcode}")
+    assert response.json["item_data"]["description"] == "Updated description"
+    assert len(response.json["item_data"]["relationships"]) == 0
+
+    response = admin_client.get(f"/items/{refcode}?sudo=1")
+    assert response.json["item_data"]["description"] == "Updated description"
+    assert len(response.json["item_data"]["relationships"]) == 1
+
+
+def test_new_sample_with_malformed_constituent_returns_400(client, default_sample_dict):
+    """A POST to /new-sample/ with a constituent that has no refcode, item_id,
+    or name should be rejected with a 400 rather than crashing in
+    entry_reference_lookup."""
+    bad_sample = copy.deepcopy(default_sample_dict)
+    bad_sample["item_id"] = "bad_constituent_sample"
+    bad_sample["synthesis_constituents"] = [
+        {"item": {"type": "starting_materials"}, "quantity": 1, "unit": "g"}
+    ]
+
+    response = client.post("/new-sample/", json=bad_sample)
+    assert response.status_code == 400, response.json
+
+
+def test_save_item_with_malformed_constituent_returns_400(client, default_sample_dict):
+    """A POST to /save-item/ that introduces a malformed constituent should be
+    rejected with a 400 rather than crashing in entry_reference_lookup."""
+    sample = copy.deepcopy(default_sample_dict)
+    sample["item_id"] = "save_bad_constituent_sample"
+    response = client.post("/new-sample/", json=sample)
+    assert response.status_code == 201, response.json
+
+    response = client.post(
+        "/save-item/",
+        json={
+            "item_id": sample["item_id"],
+            "data": {
+                "synthesis_constituents": [
+                    {"item": {"type": "starting_materials"}, "quantity": 1, "unit": "g"}
+                ]
+            },
+        },
+    )
+    assert response.status_code == 400, response.json
+    assert response.json["status"] == "error"
+
+
+def test_get_item_with_malformed_stored_constituent_returns_500(client, database, user_id):
+    """If an item with a malformed constituent ended up in the database (e.g.
+    from an older write path), GET should surface it as a server-side
+    data-integrity error (500) rather than blaming the caller with a 400."""
+    from pydatalab.models.utils import generate_unique_refcode
+
+    bad_doc = {
+        "item_id": "stored_bad_constituent_sample",
+        "refcode": generate_unique_refcode(),
+        "type": "samples",
+        "name": "bad",
+        "date": datetime.datetime(1970, 2, 1, tzinfo=datetime.timezone.utc),
+        "creator_ids": [user_id],
+        "synthesis_constituents": [
+            {"item": {"type": "starting_materials"}, "quantity": 1, "unit": "g"}
+        ],
+    }
+    database.items.insert_one(bad_doc)
+
+    try:
+        response = client.get(f"/get-item-data/{bad_doc['item_id']}")
+        assert response.status_code == 500, response.json
+        assert response.json["status"] == "error"
+    finally:
+        database.items.delete_one({"item_id": bad_doc["item_id"]})

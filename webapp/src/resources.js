@@ -29,6 +29,7 @@ export const QR_CODE_RESOLVER_URL = process.env.VUE_APP_QR_CODE_RESOLVER_URL;
 export const FEDERATION_QR_CODE_RESOLVER_URL = "https://purl.datalab-org.io";
 
 export const LOGO_URL = process.env.VUE_APP_LOGO_URL;
+export const LOGO_WIDTH = process.env.VUE_APP_LOGO_WIDTH || "100";
 export const HOMEPAGE_URL = process.env.VUE_APP_HOMEPAGE_URL;
 export const APP_VERSION = process.env.VUE_APP_GIT_VERSION;
 
@@ -130,6 +131,13 @@ export const itemTypes = {
     lightColor: "#f7d6a1",
     labelColor: "#c77c02",
     display: "equipment",
+  },
+  blocks: {
+    navbarColor: "#9C2007",
+    navbarName: "Block",
+    lightColor: "#9C2007",
+    labelColor: "#9C2007",
+    display: "block",
   },
 };
 

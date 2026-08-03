@@ -11,6 +11,8 @@ import router from "./router";
 import { library } from "@fortawesome/fontawesome-svg-core";
 import {
   faBarcode,
+  faBars,
+  faHome,
   faSave,
   faCloudUploadAlt,
   faRedo,
@@ -53,6 +55,7 @@ import {
   faCopy,
   faInfoCircle,
   faPlus,
+  faCheck,
   faCheckCircle,
   faBold,
   faItalic,
@@ -69,12 +72,18 @@ import {
   faQuoteRight,
   faLaptopCode,
   faSquareRootAlt,
+  faShareAlt,
+  faUserFriends,
+  faCaretDown,
+  faLock,
 } from "@fortawesome/free-solid-svg-icons";
 import { faPlusSquare } from "@fortawesome/free-regular-svg-icons";
-import { faGithub, faOrcid } from "@fortawesome/free-brands-svg-icons";
+import { faGithub, faOrcid, faGoogle, faMicrosoft } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 library.add(
   faBarcode,
+  faBars,
+  faHome,
   faSave,
   faPen,
   faRedo,
@@ -103,6 +112,8 @@ library.add(
   faVial,
   faGithub,
   faOrcid,
+  faGoogle,
+  faMicrosoft,
   faVials,
   faSync,
   faFolder,
@@ -120,6 +131,7 @@ library.add(
   faEllipsisH,
   faCopy,
   faInfoCircle,
+  faCheck,
   faCheckCircle,
   faBold,
   faItalic,
@@ -136,6 +148,10 @@ library.add(
   faQuoteRight,
   faLaptopCode,
   faSquareRootAlt,
+  faShareAlt,
+  faUserFriends,
+  faCaretDown,
+  faLock,
 );
 
 // import "@uppy/vue"

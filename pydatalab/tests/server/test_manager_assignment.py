@@ -10,8 +10,6 @@ def test_assign_manager_success(admin_client, real_mongo_client):
     user_2 = db.users.insert_one({"display_name": "User 2"})
     user_2_id = user_2.inserted_id
 
-    db.roles.insert_one({"_id": user_1.inserted_id, "role": "manager"})
-
     response = admin_client.patch(f"/users/{user_2_id}/managers", json={"managers": [user_1_id]})
 
     assert response.status_code == 200
@@ -20,7 +18,6 @@ def test_assign_manager_success(admin_client, real_mongo_client):
     assert user_1_id in updated_user["managers"]
 
     db.users.delete_many({"_id": {"$in": [user_1.inserted_id, user_2.inserted_id]}})
-    db.roles.delete_one({"_id": user_1.inserted_id})
 
 
 def test_assign_manager_requires_admin(client, real_mongo_client):
@@ -48,9 +45,6 @@ def test_assign_manager_prevents_direct_cycle(admin_client, real_mongo_client):
     user_2 = db.users.insert_one({"display_name": "User 2"})
     user_2_id = user_2.inserted_id
 
-    db.roles.insert_one({"_id": user_1.inserted_id, "role": "manager"})
-    db.roles.insert_one({"_id": user_2.inserted_id, "role": "manager"})
-
     response = admin_client.patch(f"/users/{user_2_id}/managers", json={"managers": [user_1_id]})
     assert response.status_code == 200
 
@@ -60,13 +54,13 @@ def test_assign_manager_prevents_direct_cycle(admin_client, real_mongo_client):
     assert "circular" in response.json["message"].lower()
 
     db.users.delete_many({"_id": {"$in": [user_1.inserted_id, user_2.inserted_id]}})
-    db.roles.delete_many({"_id": {"$in": [user_1.inserted_id, user_2.inserted_id]}})
 
 
 def test_manager_double_cycle(admin_client, real_mongo_client):
     db = real_mongo_client.get_database()
 
     user_1 = db.users.insert_one({"display_name": "User 1"})
+
     user_1_id = user_1.inserted_id
 
     user_2 = db.users.insert_one({"display_name": "User 2"})
@@ -120,6 +114,7 @@ def test_manager_double_cycle_inverse(admin_client, real_mongo_client):
     db = real_mongo_client.get_database()
 
     user_1 = db.users.insert_one({"display_name": "User 1"})
+
     user_1_id = str(user_1.inserted_id)
 
     user_2 = db.users.insert_one({"display_name": "User 2"})
@@ -171,9 +166,6 @@ def test_assign_manager_prevents_deep_cycle(admin_client, real_mongo_client):
     user_3 = db.users.insert_one({"display_name": "User 3"})
     user_3_id = str(user_3.inserted_id)
 
-    for uid in [user_1.inserted_id, user_2.inserted_id, user_3.inserted_id]:
-        db.roles.insert_one({"_id": uid, "role": "manager"})
-
     admin_client.patch(f"/users/{user_2_id}/managers", json={"managers": [user_1_id]})
     admin_client.patch(f"/users/{user_3_id}/managers", json={"managers": [user_2_id]})
 
@@ -183,9 +175,6 @@ def test_assign_manager_prevents_deep_cycle(admin_client, real_mongo_client):
     assert "circular" in response.json["message"].lower()
 
     db.users.delete_many(
-        {"_id": {"$in": [user_1.inserted_id, user_2.inserted_id, user_3.inserted_id]}}
-    )
-    db.roles.delete_many(
         {"_id": {"$in": [user_1.inserted_id, user_2.inserted_id, user_3.inserted_id]}}
     )
 
@@ -202,9 +191,6 @@ def test_assign_manager_allows_hierarchy(admin_client, real_mongo_client):
     user_3 = db.users.insert_one({"display_name": "User 3"})
     user_3_id = str(user_3.inserted_id)
 
-    for uid in [user_1.inserted_id, user_2.inserted_id]:
-        db.roles.insert_one({"_id": uid, "role": "manager"})
-
     response = admin_client.patch(f"/users/{user_2_id}/managers", json={"managers": [user_1_id]})
     assert response.status_code == 200
 
@@ -214,7 +200,6 @@ def test_assign_manager_allows_hierarchy(admin_client, real_mongo_client):
     db.users.delete_many(
         {"_id": {"$in": [user_1.inserted_id, user_2.inserted_id, user_3.inserted_id]}}
     )
-    db.roles.delete_many({"_id": {"$in": [user_1.inserted_id, user_2.inserted_id]}})
 
 
 def test_remove_manager_assignment(admin_client, real_mongo_client):
@@ -226,8 +211,6 @@ def test_remove_manager_assignment(admin_client, real_mongo_client):
     user_2 = db.users.insert_one({"display_name": "User 2", "managers": [user_1_id]})
     user_2_id = str(user_2.inserted_id)
 
-    db.roles.insert_one({"_id": user_1.inserted_id, "role": "manager"})
-
     response = admin_client.patch(f"/users/{user_2_id}/managers", json={"managers": []})
 
     assert response.status_code == 200
@@ -236,7 +219,6 @@ def test_remove_manager_assignment(admin_client, real_mongo_client):
     assert updated_user["managers"] == []
 
     db.users.delete_many({"_id": {"$in": [user_1.inserted_id, user_2.inserted_id]}})
-    db.roles.delete_one({"_id": user_1.inserted_id})
 
 
 def test_assign_nonexistent_manager(admin_client, real_mongo_client):
@@ -275,8 +257,6 @@ def test_manager_can_see_managed_user_items(admin_client, real_mongo_client, use
     user_1 = db.users.insert_one({"display_name": "User 1"})
     user_1_id = str(user_1.inserted_id)
 
-    db.roles.insert_one({"_id": user_1.inserted_id, "role": "manager"})
-
     response = admin_client.patch(f"/users/{str(user_id)}/managers", json={"managers": [user_1_id]})
     assert response.status_code == 200
 
@@ -295,14 +275,15 @@ def test_manager_can_see_managed_user_items(admin_client, real_mongo_client, use
     assert response.status_code == 200
 
     db.users.delete_one({"_id": user_1.inserted_id})
-    db.roles.delete_one({"_id": user_1.inserted_id})
 
 
 def test_manager_cycle_infinite_loop(admin_client, real_mongo_client):
     """Tests that a long linear chain of managers is impossible to create via the API after depth ~10."""
     db = real_mongo_client.get_database()
 
-    ids = db.users.insert_many([{"display_name": f"User {i}"} for i in range(1, 100)])
+    user_docs = [{"display_name": f"User {i}"} for i in range(1, 100)]
+    ids = db.users.insert_many(user_docs)
+
     for i in range(len(ids.inserted_ids) - 1):
         resp = admin_client.patch(
             f"/users/{str(ids.inserted_ids[i + 1])}/managers",

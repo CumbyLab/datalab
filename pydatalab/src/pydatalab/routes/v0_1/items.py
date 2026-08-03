@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import secrets
@@ -9,7 +10,6 @@ from deepdiff import DeepDiff
 from flask import Blueprint, jsonify, redirect, request
 from flask_login import current_user
 from pydantic import ValidationError
-from pymongo.command_cursor import CommandCursor
 from pymongo.errors import DuplicateKeyError
 from werkzeug.exceptions import BadRequest, Conflict, NotFound
 
@@ -19,7 +19,7 @@ from pydatalab.logger import LOGGER
 from pydatalab.models import ITEM_MODELS, ItemVersion
 from pydatalab.models.items import Item
 from pydatalab.models.relationships import RelationshipType
-from pydatalab.models.utils import generate_unique_refcode
+from pydatalab.models.utils import InlineSubstance, generate_unique_refcode
 from pydatalab.models.versions import (
     CompareVersionsQuery,
     RestoreVersionRequest,
@@ -89,18 +89,35 @@ def get_starting_materials():
                 {
                     "$match": {
                         "type": "starting_materials",
-                        **get_default_permissions(user_only=False),
+                        **get_default_permissions(user_only=False, inherit_from_collections=False),
                     }
                 },
+                {"$lookup": collections_lookup()},
                 {
                     "$project": {
                         "_id": 0,
                         "item_id": 1,
-                        "blocks": {"blocktype": 1, "title": 1},
+                        "blocks": {
+                            "$map": {
+                                "input": {"$objectToArray": {"$ifNull": ["$blocks_obj", {}]}},
+                                "as": "b",
+                                "in": {
+                                    "blocktype": "$$b.v.blocktype",
+                                    "title": "$$b.v.title",
+                                },
+                            }
+                        },
+                        "collections": {
+                            "collection_id": 1,
+                        },
                         "nblocks": {"$size": "$display_order"},
                         "nfiles": {"$size": "$file_ObjectIds"},
                         "date": 1,
                         "chemform": 1,
+                        "smiles": 1,
+                        "inchi_key": 1,
+                        "GHS_codes": 1,
+                        "molar_mass": 1,
                         "name": 1,
                         "type": 1,
                         "chemical_purity": 1,
@@ -109,6 +126,7 @@ def get_starting_materials():
                         "supplier": 1,
                         "location": 1,
                         "status": 1,
+                        "CAS": 1,
                     }
                 },
                 {
@@ -125,7 +143,7 @@ def get_starting_materials():
 get_starting_materials.methods = ("GET",)  # type: ignore
 
 
-def get_items_summary(match: dict | None = None, project: dict | None = None) -> CommandCursor:
+def get_items_summary(match: dict | None = None, project: dict | None = None) -> list[dict]:
     """Return a summary of item entries that match some criteria.
 
     Parameters:
@@ -140,10 +158,19 @@ def get_items_summary(match: dict | None = None, project: dict | None = None) ->
 
     _project = {
         "_id": 0,
-        "blocks": {"blocktype": 1, "title": 1},
+        "blocks": {
+            "$map": {
+                "input": {"$objectToArray": {"$ifNull": ["$blocks_obj", {}]}},
+                "as": "b",
+                "in": {
+                    "blocktype": "$$b.v.blocktype",
+                    "title": "$$b.v.title",
+                },
+            }
+        },
         "creators": {
             "display_name": 1,
-            "contact_email": 1,
+            "gravatar_hash": 1,
         },
         "groups": {
             "display_name": 1,
@@ -156,6 +183,10 @@ def get_items_summary(match: dict | None = None, project: dict | None = None) ->
         "item_id": 1,
         "name": 1,
         "chemform": 1,
+        "smiles": 1,
+        "inchi_key": 1,
+        "GHS_codes": 1,
+        "molar_mass": 1,
         "nblocks": {"$size": "$display_order"},
         "nfiles": {"$size": "$file_ObjectIds"},
         "characteristic_chemical_formula": 1,
@@ -173,19 +204,21 @@ def get_items_summary(match: dict | None = None, project: dict | None = None) ->
             else:
                 _project[key] = 1
 
-    return flask_mongo.db.items.aggregate(
-        [
-            {"$match": match},
-            {"$lookup": creators_lookup()},
-            {"$lookup": groups_lookup()},
-            {"$lookup": collections_lookup()},
-            {"$project": _project},
-            {"$sort": {"date": -1}},
-        ]
+    return list(
+        flask_mongo.db.items.aggregate(
+            [
+                {"$match": match},
+                {"$lookup": creators_lookup()},
+                {"$lookup": groups_lookup()},
+                {"$lookup": collections_lookup()},
+                {"$project": _project},
+                {"$sort": {"date": -1}},
+            ]
+        )
     )
 
 
-def get_samples_summary(match: dict | None = None, project: dict | None = None) -> CommandCursor:
+def get_samples_summary(match: dict | None = None, project: dict | None = None) -> list[dict]:
     """Return a summary of samples/cells entries that match some criteria.
 
     Parameters:
@@ -196,15 +229,24 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
     """
     if not match:
         match = {}
-    match.update(get_default_permissions(user_only=False))
+    match.update(get_default_permissions(user_only=False, inherit_from_collections=False))
     match["type"] = {"$in": ["samples", "cells"]}
 
     _project = {
         "_id": 0,
-        "blocks": {"blocktype": 1, "title": 1},
+        "blocks": {
+            "$map": {
+                "input": {"$objectToArray": {"$ifNull": ["$blocks_obj", {}]}},
+                "as": "b",
+                "in": {
+                    "blocktype": "$$b.v.blocktype",
+                    "title": "$$b.v.title",
+                },
+            }
+        },
         "creators": {
             "display_name": 1,
-            "contact_email": 1,
+            "gravatar_hash": 1,
         },
         "groups": {
             "display_name": 1,
@@ -217,6 +259,10 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
         "item_id": 1,
         "name": 1,
         "chemform": 1,
+        "GHS_codes": 1,
+        "smiles": 1,
+        "molar_mass": 1,
+        "CAS": 1,
         "nblocks": {"$size": "$display_order"},
         "nfiles": {"$size": "$file_ObjectIds"},
         "characteristic_chemical_formula": 1,
@@ -234,15 +280,17 @@ def get_samples_summary(match: dict | None = None, project: dict | None = None) 
             else:
                 _project[key] = 1
 
-    return flask_mongo.db.items.aggregate(
-        [
-            {"$match": match},
-            {"$lookup": creators_lookup()},
-            {"$lookup": groups_lookup()},
-            {"$lookup": collections_lookup()},
-            {"$project": _project},
-            {"$sort": {"date": -1}},
-        ]
+    return list(
+        flask_mongo.db.items.aggregate(
+            [
+                {"$match": match},
+                {"$lookup": creators_lookup()},
+                {"$lookup": groups_lookup()},
+                {"$lookup": collections_lookup()},
+                {"$project": _project},
+                {"$sort": {"date": -1}},
+            ]
+        )
     )
 
 
@@ -254,7 +302,7 @@ def creators_lookup() -> dict:
             {"$match": {"$expr": {"$in": ["$_id", {"$ifNull": ["$$creator_ids", []]}]}}},
             {"$addFields": {"__order": {"$indexOfArray": ["$$creator_ids", "$_id"]}}},
             {"$sort": {"__order": 1}},
-            {"$project": {"_id": 1, "display_name": 1, "contact_email": 1}},
+            {"$project": {"_id": 1, "display_name": 1, "gravatar_hash": 1}},
         ],
         "as": "creators",
     }
@@ -276,6 +324,8 @@ def groups_lookup() -> dict:
 
 def entry_reference_lookup(item_doc: dict) -> dict:
     """Looks up any field that contains an entry reference and resolves it to the item data."""
+
+    from pydatalab.models.utils import Constituent
 
     # TODO (v0.8): We hard-code this for now but should extract this from pydantic v2 schemas instead
     # Each field contains a reference like {"item": {"item_id": ..., "refcode": ..., "type": ...}},
@@ -300,23 +350,39 @@ def entry_reference_lookup(item_doc: dict) -> dict:
         dereferenced_fields[field] = []
 
         for subitem in item_doc.get(field, []):
-            refcode = subitem.get("item", {}).get("refcode", None)
-            if refcode:
-                preferred_refs.append({"refcode": refcode})
+            try:
+                constituent = Constituent(**copy.deepcopy(subitem))
+            except ValidationError as exc:
+                # Enrichment is opportunistic — if a stored subitem can't be parsed,
+                # skip the lookup and leave it untouched so the caller can still see
+                # and repair it.
+                LOGGER.warning(
+                    "Skipping entry reference lookup for unparseable subitem in %s: %s",
+                    field,
+                    exc,
+                )
+                preferred_refs.append(None)
                 continue
-            item_id = subitem.get("item", {}).get("item_id", None)
-            if item_id:
-                preferred_refs.append({"item_id": item_id})
-                continue
-
-            # If no refcode or item_id, this is an inlined item, so no lookup needed
-            preferred_refs.append(None)
+            if isinstance(constituent.item, InlineSubstance):
+                # If no refcode or item_id, this is an inlined item, so no lookup needed
+                preferred_refs.append(None)
+            elif constituent.item.refcode:
+                preferred_refs.append({"refcode": constituent.item.refcode})
+            elif constituent.item.item_id:
+                preferred_refs.append({"item_id": constituent.item.item_id})
 
         for ind, ref in enumerate(preferred_refs):
             if ref:
                 deref = flask_mongo.db.items.find_one(
                     {**ref, **get_default_permissions()},
-                    projection={"name": 1, "item_id": 1, "refcode": 1, "chemform": 1, "type": 1},
+                    projection={
+                        "name": 1,
+                        "item_id": 1,
+                        "refcode": 1,
+                        "chemform": 1,
+                        "type": 1,
+                        "_id": 0,
+                    },
                 )
             # If the source item has been deleted, is inlined or is inaccessible, use the original subitem data
             if not ref or not deref:
@@ -360,6 +426,7 @@ def collections_lookup() -> dict:
                         "$in": ["$_id", {"$ifNull": ["$$collection_ids", []]}],
                     },
                     "type": "collections",
+                    **get_default_permissions(user_only=False),
                 }
             },
             {"$project": {"_id": 1, "collection_id": 1}},
@@ -394,6 +461,32 @@ def _check_collections(sample_dict: dict) -> list[dict[str, str]]:
             sample_dict["collections"][ind] = {"immutable_id": result["_id"]}
 
     return sample_dict.get("collections", []) or []
+
+
+def _scrub_collections_for_save(sample_dict: dict) -> list[dict[str, str]]:
+    """Scrub collection data to only include collections the user has access to.
+
+    This allows users to save items that are part of private collections they don't control.
+    Collections the user doesn't have access to are silently ignored.
+
+    Returns:
+        A list of dictionaries with singular key `immutable_id` for accessible collections only.
+    """
+    accessible_collections = []
+
+    if sample_dict.get("collections", []):
+        for c in sample_dict.get("collections", []):
+            query = {}
+            query.update(c)
+            if "immutable_id" in c:
+                query["_id"] = ObjectId(query.pop("immutable_id"))
+
+            result = flask_mongo.db.collections.find_one({**query, **get_default_permissions()})
+
+            if result:
+                accessible_collections.append({"immutable_id": result["_id"]})
+
+    return accessible_collections
 
 
 @ITEMS.route("/samples/", methods=["GET"])
@@ -580,7 +673,7 @@ def _create_sample(
         new_sample["creators"] = [
             {
                 "display_name": current_user.person.display_name,
-                "contact_email": current_user.person.contact_email,
+                "gravatar_hash": current_user.person.gravatar_hash,
             }
         ]
 
@@ -608,6 +701,9 @@ def _create_sample(
 
     # Try to deserialize the item data into the appropriate model
     try:
+        # Check on relationship fields and prefill
+        new_sample = entry_reference_lookup(new_sample)
+
         data_model: Item = model(**new_sample)
 
     except ValidationError as error:
@@ -631,7 +727,20 @@ def _create_sample(
 
     # Save initial version snapshot after successful item creation
     try:
-        save_version_snapshot(data_model.refcode, action=VersionAction.CREATED)
+        version_resp, version_status = save_version_snapshot(
+            data_model.refcode, action=VersionAction.CREATED
+        )
+        if version_status != 200:
+            LOGGER.error(
+                "Failed to save initial version for item %s after creation: %s",
+                data_model.item_id,
+                version_resp,
+            )
+        elif "version" in version_resp:
+            flask_mongo.db.items.update_one(
+                {"item_id": data_model.item_id},
+                {"$set": {"version": version_resp["version"]}},
+            )
     except Exception as e:
         # Log but don't fail the request since item was already created successfully
         LOGGER.error(
@@ -1053,8 +1162,6 @@ def get_item_data(
             404,
         )
 
-    doc = entry_reference_lookup(doc)
-
     # determine the item type and validate according to the appropriate schema
     try:
         ItemModel = ITEM_MODELS[doc["type"]]
@@ -1064,7 +1171,29 @@ def get_item_data(
         else:
             raise BadRequest(f"Item {item_id=} has no type field in document.")
 
-    doc = ItemModel(**doc)
+    try:
+        doc = entry_reference_lookup(doc)
+        doc = ItemModel(**doc)
+    except ValidationError as error:
+        # The stored document doesn't validate against its declared schema.
+        # This is a server-side data integrity problem, not a bad request,
+        # so surface it as a 500 with a clear message rather than blaming the caller.
+        LOGGER.error(
+            "Stored item %s failed to validate against schema for type %s: %s",
+            item_id,
+            doc["type"],
+            error,
+        )
+        return (
+            jsonify(
+                status="error",
+                message=(
+                    f"Item {item_id=} is stored in a state that does not validate "
+                    f"against the expected schema for its type {doc['type']}: {error}"
+                ),
+            ),
+            500,
+        )
 
     # find any documents with relationships that mention this document
     relationships_query_results = flask_mongo.db.items.find(
@@ -1153,22 +1282,40 @@ def list_versions(refcode):
         refcode = f"{CONFIG.IDENTIFIER_PREFIX}:{refcode}"
 
     versions = list(
-        flask_mongo.db.item_versions.find(
-            {"refcode": refcode},
-            {
-                "_id": 1,
-                "timestamp": 1,
-                "user_id": 1,
-                "datalab_version": 1,
-                "version": 1,
-                "action": 1,
-                "restored_from_version": 1,
-                "data.version": 1,
-            },
-        ).sort("version", -1)
+        flask_mongo.db.item_versions.aggregate(
+            [
+                {"$match": {"refcode": refcode}},
+                {
+                    "$lookup": {
+                        "from": "users",
+                        "as": "creator",
+                        "let": {"user_id": "$user_id"},
+                        "pipeline": [
+                            {"$match": {"$expr": {"$eq": ["$_id", "$$user_id"]}}},
+                            {"$project": {"_id": 0, "display_name": 1, "gravatar_hash": 1}},
+                        ],
+                    }
+                },
+                # $lookup always yields an array; collapse the (0 or 1) match
+                # to a single-valued creator, leaving it null when absent.
+                {"$set": {"creator": {"$arrayElemAt": ["$creator", 0]}}},
+                {
+                    "$project": {
+                        "_id": 1,
+                        "timestamp": 1,
+                        "creator": 1,
+                        "datalab_version": 1,
+                        "version": 1,
+                        "action": 1,
+                        "restored_from_version": 1,
+                        "data.version": 1,
+                        "user_agent": 1,
+                    }
+                },
+                {"$sort": {"version": -1}},
+            ]
+        )
     )
-    for v in versions:
-        v["_id"] = str(v["_id"])
     return jsonify({"status": "success", "versions": versions}), 200
 
 
@@ -1193,10 +1340,33 @@ def get_version(refcode, version_id):
     except (InvalidId, TypeError):
         return jsonify({"status": "error", "message": f"Invalid version_id: {version_id}"}), 400
 
-    version = flask_mongo.db.item_versions.find_one({"_id": version_object_id, "refcode": refcode})
+    version = list(
+        flask_mongo.db.item_versions.aggregate(
+            [
+                {"$match": {"_id": version_object_id, "refcode": refcode}},
+                # Lookup from user_id from users collection and fill in creator info
+                {
+                    "$lookup": {
+                        "from": "users",
+                        "as": "creator",
+                        "let": {"user_id": "$user_id"},
+                        "pipeline": [
+                            {"$match": {"$expr": {"$eq": ["$_id", "$$user_id"]}}},
+                            {"$project": {"_id": 0, "display_name": 1, "gravatar_hash": 1}},
+                        ],
+                    }
+                },
+                {"$set": {"creator": {"$arrayElemAt": ["$creator", 0]}}},
+            ]
+        )
+    )
+
+    if len(version) >= 1:
+        version = version[0]
+
     if not version:
         return jsonify({"status": "error", "message": "Version not found"}), 404
-    version["_id"] = str(version["_id"])
+
     return jsonify({"status": "success", "version": version}), 200
 
 
@@ -1432,9 +1602,18 @@ def save_version(refcode):
     """Manually save the current state of an item as a version snapshot with an incremental version number."""
     response, status_code = save_version_snapshot(
         refcode,
-        action=VersionAction.MANUAL_SAVE,
+        action=None,  # let the function determine the appropriate action (e.g. AGENT_SAVE vs MANUAL_SAVE) based on user-agent
         permission_filter=get_default_permissions(user_only=False),
     )
+    if status_code == 200 and "version" in response:
+        if len(refcode.split(":")) != 2:
+            full_refcode = f"{CONFIG.IDENTIFIER_PREFIX}:{refcode}"
+        else:
+            full_refcode = refcode
+        flask_mongo.db.items.update_one(
+            {"refcode": full_refcode},
+            {"$set": {"version": response["version"]}},
+        )
     return jsonify(response), status_code
 
 
@@ -1506,9 +1685,6 @@ def save_item():
             400,
         )
 
-    # Increment version number on the item itself
-    updated_data["version"] = item.get("version", 0) + 1
-
     user_only = item["type"] not in ("starting_materials", "equipment")
 
     item = flask_mongo.db.items.find_one(
@@ -1524,23 +1700,60 @@ def save_item():
             404,
         )
 
-    if updated_data.get("collections", []):
-        try:
-            updated_data["collections"] = _check_collections(updated_data)
-        except ValueError as exc:
-            return (
-                dict(
-                    status="error",
-                    message=f"Cannot update {item_id!r} with missing collections {updated_data['collections']!r}: {exc}",
-                    item_id=item_id,
-                ),
-                401,
-            )
+    if "collections" in updated_data:
+        requested_collections = updated_data["collections"]
+
+        if requested_collections:
+            scrubbed_collections = _scrub_collections_for_save(updated_data)
+
+            if len(scrubbed_collections) != len(requested_collections):
+                existing_collection_relationships = [
+                    rel for rel in item.get("relationships", []) if rel.get("type") == "collections"
+                ]
+
+                scrubbed_collection_ids = {c["immutable_id"] for c in scrubbed_collections}
+
+                inaccessible_collections = [
+                    {"immutable_id": rel["immutable_id"]}
+                    for rel in existing_collection_relationships
+                    if rel["immutable_id"] not in scrubbed_collection_ids
+                    and rel["immutable_id"]
+                    not in [c.get("immutable_id") for c in requested_collections]
+                ]
+
+                updated_data["collections"] = inaccessible_collections + scrubbed_collections
+            else:
+                updated_data["collections"] = scrubbed_collections
+        else:
+            existing_collection_relationships = [
+                rel for rel in item.get("relationships", []) if rel.get("type") == "collections"
+            ]
+
+            if existing_collection_relationships:
+                existing_collections = [
+                    {"immutable_id": rel["immutable_id"]}
+                    for rel in existing_collection_relationships
+                ]
+                accessible = _scrub_collections_for_save({"collections": existing_collections})
+
+                if len(accessible) != len(existing_collections):
+                    accessible_ids = {c["immutable_id"] for c in accessible}
+                    inaccessible = [
+                        {"immutable_id": rel["immutable_id"]}
+                        for rel in existing_collection_relationships
+                        if rel["immutable_id"] not in accessible_ids
+                    ]
+                    updated_data["collections"] = inaccessible
 
     item_type = item["type"]
+
+    preserve_relationships = "collections" not in updated_data
+    original_relationships = item.get("relationships", []) if preserve_relationships else None
+
     item.update(updated_data)
 
     try:
+        item = entry_reference_lookup(item)
         item = ITEM_MODELS[item_type](**item).dict()
     except ValidationError as exc:
         return (
@@ -1551,6 +1764,9 @@ def save_item():
             ),
             400,
         )
+
+    if preserve_relationships and original_relationships is not None:
+        item["relationships"] = original_relationships
 
     # remove collections and creators and any other reference fields
     item.pop("collections")
@@ -1572,17 +1788,23 @@ def save_item():
             400,
         )
 
-    # Now save a version AFTER successful item update
-    # If this fails, we log but don't fail the request since item was already saved
+    # Now save a version AFTER successful item update.
+    # Only increment item.version when content actually changed (i.e., a snapshot was minted).
+    # If this fails, we log but don't fail the request since item was already saved.
     try:
         save_version_resp_dict, save_version_status = save_version_snapshot(
-            refcode, action=VersionAction.MANUAL_SAVE
+            refcode,
         )
         if save_version_status != 200:
             LOGGER.error(
                 "Failed to save version for item %s after successful update: %s",
                 item_id,
                 save_version_resp_dict,
+            )
+        elif "version" in save_version_resp_dict:
+            flask_mongo.db.items.update_one(
+                {"item_id": item_id},
+                {"$set": {"version": save_version_resp_dict["version"]}},
             )
     except Exception as e:
         LOGGER.error(
@@ -1634,12 +1856,12 @@ def get_access_token_info(refcode: str):
         user_info = None
         if existing_token.get("user"):
             user_doc = flask_mongo.db.users.find_one(
-                {"_id": existing_token["user"]}, {"display_name": 1, "contact_email": 1}
+                {"_id": existing_token["user"]}, {"display_name": 1, "gravatar_hash": 1}
             )
             if user_doc:
                 user_info = {
                     "display_name": user_doc.get("display_name"),
-                    "contact_email": user_doc.get("contact_email"),
+                    "gravatar_hash": user_doc.get("gravatar_hash"),
                 }
 
         return jsonify(

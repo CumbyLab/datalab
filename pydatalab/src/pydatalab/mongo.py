@@ -1,4 +1,5 @@
 import atexit
+import hashlib
 import re
 from functools import lru_cache
 from typing import Any
@@ -17,9 +18,12 @@ __all__ = (
     "create_default_indices",
     "_get_active_mongo_client",
     "insert_pydantic_model_fork_safe",
+    "gravatar_hash_for",
+    "run_startup_migrations",
     "ITEMS_FTS_FIELDS",
     "USERS_FTS_FIELDS",
     "COLLECTIONS_FTS_FIELDS",
+    "GROUPS_FTS_FIELDS",
     "generate_heuristic_regex_search",
     "build_search_pipeline",
 )
@@ -50,6 +54,9 @@ USERS_FTS_FIELDS: set[str] = {"identities.name", "display_name", "contact_email"
 
 COLLECTIONS_FTS_FIELDS: set[str] = {"collection_id", "title", "description"}
 """Fields to search for collections."""
+
+GROUPS_FTS_FIELDS: set[str] = {"group_id", "display_name", "description"}
+"""Fields to search for groups."""
 
 
 def generate_heuristic_regex_search(
@@ -341,16 +348,19 @@ def create_default_indices(
         db.users.drop_index(group_fts_name)
         ret += create_group_fts()
 
-    ret += db.export_tasks.create_index(
+    ret += db.tasks.create_index(
         "task_id", unique=True, name="unique task ID", background=background
     )
-    ret += db.export_tasks.create_index(
-        "creator_id", name="export task creator", background=background
+
+    ret += db.tasks.create_index("type", name="task type", background=background)
+    ret += db.tasks.create_index("creator_id", name="task creator", background=background)
+    ret += db.tasks.create_index("created_at", name="task created at", background=background)
+    ret += db.tasks.create_index("status", name="task status", background=background)
+    ret += db.tasks.create_index(
+        [("type", pymongo.ASCENDING), ("creator_id", pymongo.ASCENDING)],
+        name="task type and creator",
+        background=background,
     )
-    ret += db.export_tasks.create_index(
-        "created_at", name="export task created at", background=background
-    )
-    ret += db.export_tasks.create_index("status", name="export task status", background=background)
 
     # Version control indexes
     ret += db.item_versions.create_index("refcode", name="version refcode", background=background)
@@ -365,3 +375,64 @@ def create_default_indices(
     )
 
     return ret
+
+
+def gravatar_hash_for(email: str | None, display_name: str | None = None) -> str | None:
+    """Return the MD5 hash used by the frontend to look up a Gravatar avatar.
+
+    Prefers the trimmed, lowercased contact email (which Gravatar indexes); falls
+    back to hashing the display name so a deterministic identicon can still be
+    rendered when no email is available. Returns ``None`` if neither is set.
+    """
+    payload = (str(email) if email else "").strip().lower() or (
+        str(display_name) if display_name else ""
+    ).strip()
+    if not payload:
+        return None
+    return hashlib.md5(payload.encode("utf-8"), usedforsecurity=False).hexdigest()
+
+
+def _backfill_user_gravatar_hashes(db) -> int:
+    """Populate `gravatar_hash` on any user doc that lacks it."""
+    updates: list[pymongo.UpdateOne] = []
+    for user in db.users.find(
+        {"gravatar_hash": {"$exists": False}},
+        {"_id": 1, "contact_email": 1, "display_name": 1},
+    ):
+        updates.append(
+            pymongo.UpdateOne(
+                {"_id": user["_id"]},
+                {
+                    "$set": {
+                        "gravatar_hash": gravatar_hash_for(
+                            user.get("contact_email"), user.get("display_name")
+                        )
+                    }
+                },
+            )
+        )
+    if updates:
+        db.users.bulk_write(updates, ordered=False)
+    return len(updates)
+
+
+STARTUP_MIGRATIONS = (_backfill_user_gravatar_hashes,)
+"""Idempotent one-shot DB fixups run at app startup, after index creation.
+
+Each entry takes a pymongo database handle and returns the number of documents
+updated. Keep migrations idempotent and cheap — they run on every boot.
+"""
+
+
+def run_startup_migrations(client: pymongo.MongoClient | None = None) -> dict[str, int]:
+    """Run each migration in :data:`STARTUP_MIGRATIONS` against the configured DB."""
+    if client is None:
+        client = _get_active_mongo_client()
+    db = client.get_database()
+    results: dict[str, int] = {}
+    for migration in STARTUP_MIGRATIONS:
+        count = migration(db)
+        results[migration.__name__] = count
+        if count:
+            LOGGER.info("Startup migration %s updated %d document(s)", migration.__name__, count)
+    return results

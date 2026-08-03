@@ -16,11 +16,17 @@
             </div>
           </div>
           <div class="form-row">
-            <div class="form-group col">
-              <label id="creators" class="mr-2">Creators</label>
-              <div>
-                <Creators :creators="CollectionCreators" aria-labelledby="creators" />
-              </div>
+            <div class="form-group col-md-6">
+              <ToggleableCreatorsFormGroup
+                v-model="CollectionCreators"
+                :collection-id="collection_id"
+              />
+            </div>
+            <div class="form-group col-md-6">
+              <ToggleableGroupsFormGroup
+                v-model="CollectionGroups"
+                :collection-id="collection_id"
+              />
             </div>
           </div>
         </div>
@@ -55,20 +61,20 @@
       ]"
       :show-buttons="true"
       :collection-id="collection_id"
-      @remove-selected-items-from-collection="handleItemsRemovedFromCollection"
     />
   </div>
 </template>
 
 <script>
 import { createComputedSetterForCollectionField } from "@/field_utils.js";
-import { getCollectionSampleList } from "@/server_fetch_utils";
 import TiptapInline from "@/components/TiptapInline";
 import Creators from "@/components/Creators";
 import CollectionRelationshipVisualization from "@/components/CollectionRelationshipVisualization";
 import DynamicDataTable from "@/components/DynamicDataTable";
 import FormattedItemStatus from "@/components/FormattedItemStatus.vue";
 import ExportButton from "@/components/ExportButton";
+import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGroup";
+import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
 
 export default {
   components: {
@@ -78,6 +84,8 @@ export default {
     DynamicDataTable,
     FormattedItemStatus,
     ExportButton,
+    ToggleableCreatorsFormGroup,
+    ToggleableGroupsFormGroup,
   },
   props: {
     collection_id: {
@@ -131,25 +139,13 @@ export default {
     Title: createComputedSetterForCollectionField("title"),
     Name: createComputedSetterForCollectionField("name"),
     CollectionCreators: createComputedSetterForCollectionField("creators"),
+    CollectionGroups: createComputedSetterForCollectionField("groups"),
     children() {
       return this.$store.state.all_collection_children[this.collection_id] || [];
     },
-  },
-  created() {
-    this.getCollectionChildren();
-  },
-  methods: {
-    getCollectionChildren() {
-      getCollectionSampleList(this.collection_id)
-        .then(() => {
-          this.tableIsReady = true;
-        })
-        .catch(() => {
-          this.fetchError = true;
-        });
-    },
-    handleItemsRemovedFromCollection() {
-      this.getCollectionChildren();
+    collectionRefcode() {
+      const collection = this.$store.state.all_collection_data[this.collection_id];
+      return collection?.refcode || null;
     },
   },
 };

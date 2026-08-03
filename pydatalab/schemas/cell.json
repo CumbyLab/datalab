@@ -355,7 +355,9 @@
       "enum": [
         "email",
         "orcid",
-        "github"
+        "github",
+        "google",
+        "microsoft"
       ],
       "type": "string"
     },
@@ -525,6 +527,10 @@
           "type": "string",
           "format": "email"
         },
+        "gravatar_hash": {
+          "title": "Gravatar Hash",
+          "type": "string"
+        },
         "managers": {
           "title": "Managers",
           "type": "array",
@@ -652,6 +658,25 @@
           "type": "integer"
         }
       }
+    },
+    "FileChecksums": {
+      "title": "FileChecksums",
+      "description": "Content checksums for a file.",
+      "type": "object",
+      "properties": {
+        "md5": {
+          "title": "Md5",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "md5",
+        "sha256"
+      ]
     },
     "File": {
       "title": "File",
@@ -796,6 +821,9 @@
         "is_live": {
           "title": "Is Live",
           "type": "boolean"
+        },
+        "checksums": {
+          "$ref": "#/definitions/FileChecksums"
         }
       },
       "required": [

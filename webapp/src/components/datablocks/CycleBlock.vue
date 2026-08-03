@@ -22,7 +22,7 @@
     </div>
     <div class="form-row mb-2">
       <component
-        :is="mode === FILE_MODE.MULTI ? 'FileMultiSelectDropdown' : 'FileSelectDropdown'"
+        :is="mode === FILE_MODE.MULTI ? 'FileMultiSelect' : 'FileSelectDropdown'"
         v-model="fileModel"
         :item_id="item_id"
         :block_id="block_id"
@@ -40,8 +40,11 @@
       :initially-expanded="pending_comparison_file_ids.length > 0"
       :show-apply-button="false"
     />
-    <div class="form-row mt-2">
+    <div class="form-row mt-2 mb-3">
       <button class="btn btn-primary btn-sm" @click="applyAllSelections">Apply Changes</button>
+      <a v-if="bdf_url" :href="api_url + bdf_url" class="btn btn-secondary btn-sm ml-2" download
+        >Export CSV (BDF)</a
+      >
     </div>
     <div>
       <div class="form-row">
@@ -183,12 +186,13 @@
 <script>
 import DataBlockBase from "@/components/datablocks/DataBlockBase";
 import FileSelectDropdown from "@/components/FileSelectDropdown";
-import FileMultiSelectDropdown from "@/components/FileMultiSelectDropdown";
+import FileMultiSelect from "@/components/FileMultiSelect";
 import BokehPlot from "@/components/BokehPlot";
 import CollapsibleComparisonFileSelect from "@/components/CollapsibleComparisonFileSelect";
 
 import { updateBlockFromServer } from "@/server_fetch_utils.js";
 import { createComputedSetterForBlockField } from "@/field_utils.js";
+import { API_URL } from "@/resources.js";
 
 // File selection mode constants
 const FILE_MODE = {
@@ -200,7 +204,7 @@ export default {
   components: {
     DataBlockBase,
     FileSelectDropdown,
-    FileMultiSelectDropdown,
+    FileMultiSelect,
     BokehPlot,
     CollapsibleComparisonFileSelect,
   },
@@ -218,6 +222,7 @@ export default {
   setup() {
     return {
       FILE_MODE,
+      api_url: API_URL,
     };
   },
   data() {
@@ -279,6 +284,9 @@ export default {
     // normalizingMass() {
     //   return this.$store.all_item_data[this.item_id]["characteristic_mass"] || null;
     // },
+    bdf_url() {
+      return this.$store.state.all_item_data[this.item_id]["blocks_obj"][this.block_id].bdf_url;
+    },
     file_ids: createComputedSetterForBlockField("file_ids"),
     prev_file_ids: createComputedSetterForBlockField("prev_file_ids"),
     prev_single_file_id: createComputedSetterForBlockField("prev_single_file_id"),
@@ -456,10 +464,14 @@ export default {
         this.item_id,
         this.block_id,
         this.$store.state.all_item_data[this.item_id]["blocks_obj"][this.block_id],
-      ).then(() => {
-        this.bokehPlotLimitedWidth = this.derivative_mode != "dQ/dV";
-        this.isReplotButtonDisplayed = false;
-      });
+      )
+        .then(() => {
+          this.bokehPlotLimitedWidth = this.derivative_mode != "dQ/dV";
+          this.isReplotButtonDisplayed = false;
+        })
+        .catch((error) => {
+          console.error("Error updating block:", error);
+        });
     },
   },
 };

@@ -1,4 +1,4 @@
-ARG UV_VERSION="0.9.21"
+ARG UV_VERSION="0.11.8"
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv_image
 
 FROM python:3.11-slim-trixie AS api
@@ -39,11 +39,22 @@ ARG SETUPTOOLS_SCM_PRETEND_VERSION
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 
 WORKDIR /app
+COPY ./pydatalab/tasks.py .
 COPY ./pydatalab/pyproject.toml .
 COPY ./pydatalab/uv.lock .
-COPY ./pydatalab/plugins/ ./plugins
 
-RUN uv sync --locked --no-dev --all-extras
+
+# plugins.toml lives at the repo root; copy it one level above WORKDIR so that
+# `invoke dev.install` finds it via `<tasks.py>/../plugins.toml` (i.e. /plugins.toml),
+# and copy plugin source trees to /pydatalab/plugins/ so that relative paths in
+# plugins.toml (resolved relative to plugins.toml itself) point at real files.
+COPY ./plugins.tom[l] /plugins.toml
+COPY ./pydatalab/plugins/ /pydatalab/plugins/
+
+# Install the base datalab venv with dev dependencies (to include invoke)
+# then run the datalab custom install script to pick up any plugins and install
+# them in the base venv
+RUN uv sync --extra server --locked && uv run invoke dev.install --no-dev
 
 WORKDIR /app
 
@@ -51,8 +62,10 @@ WORKDIR /app
 COPY ./pydatalab/ ./
 RUN git config --global --add safe.directory /
 
-# Install editable mode so that the server runs from a sensible place where we can stuff .env files
-RUN --mount=type=bind,target=/.git,source=./.git uv pip install --python /opt/.venv/bin/python --no-deps --editable .
+# Install editable mode so that the server runs from a sensible place where we can stuff .env files.
+# setuptools-scm gets its version from SETUPTOOLS_SCM_PRETEND_VERSION (build arg above) rather than
+# a `.git` bind mount, so this layer doesn't invalidate on every commit.
+RUN uv pip install --python /opt/.venv/bin/python --no-deps --editable .
 
 # Define some default gunicorn runtime args
 ENV WEB_CONCURRENCY=4

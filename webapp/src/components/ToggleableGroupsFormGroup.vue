@@ -2,15 +2,18 @@
   <div
     ref="outerdiv"
     class="h-100 form-group clickable"
-    @click="isEditingGroups = !isEditingGroups"
+    data-testid="toggleable-groups"
+    @click="handleClick"
   >
-    <label id="groups" class="clickable">
-      Shared with Groups (read-only)
+    <label class="clickable">
+      Shared with Groups
       <font-awesome-icon id="edit-icon" class="pl-1" icon="pen" size="xs" :fade="isEditingGroups" />
     </label>
     <div>
       <div v-if="!isEditingGroups">
-        <div v-if="value.length === 0" class="text-muted small">Not shared with any groups</div>
+        <div v-if="!value || value.length === 0" class="text-muted small">
+          Not shared with any groups
+        </div>
         <div v-else class="d-flex flex-wrap gap-2">
           <FormattedGroupName v-for="group in value" :key="group.immutable_id" :group="group" />
         </div>
@@ -31,7 +34,7 @@ import { DialogService } from "@/services/DialogService";
 import GroupSelect from "@/components/GroupSelect";
 import FormattedGroupName from "@/components/FormattedGroupName.vue";
 import { OnClickOutside } from "@vueuse/components";
-import { updateItemPermissions } from "@/server_fetch_utils.js";
+import { updateItemPermissions, updateCollectionPermissions } from "@/server_fetch_utils.js";
 import { toRaw } from "vue";
 
 export default {
@@ -40,11 +43,16 @@ export default {
     FormattedGroupName,
     OnClickOutside,
   },
+  inject: {
+    openSharingModal: { default: null },
+  },
   props: {
-    refcode: { type: String, required: true },
+    refcode: { type: String, required: false, default: null },
+    collectionId: { type: String, required: false, default: null },
     modelValue: {
       type: Array,
-      required: true,
+      required: false,
+      default: () => [],
     },
   },
   emits: ["update:modelValue"],
@@ -68,18 +76,27 @@ export default {
   watch: {
     async isEditingGroups(newValue, oldValue) {
       if (newValue === false && oldValue === true) {
-        if (JSON.stringify(toRaw(this.value)) === JSON.stringify(toRaw(this.shadowValue))) {
+        const currentValue = Array.isArray(this.value) ? this.value : [];
+        const shadowValue = Array.isArray(this.shadowValue) ? this.shadowValue : [];
+        if (JSON.stringify(toRaw(currentValue)) === JSON.stringify(toRaw(shadowValue))) {
           return;
         }
 
         try {
           const confirmed = await DialogService.confirm({
             title: "Update Permissions",
-            message: "Are you sure you want to update the group permissions of this item?",
+            message: `Are you sure you want to update the group permissions of this ${
+              this.collectionId ? "collection" : "item"
+            }?`,
             type: "warning",
           });
           if (confirmed) {
-            await updateItemPermissions(this.refcode, null, this.shadowValue);
+            // Use the appropriate function based on whether it's a collection or item
+            if (this.collectionId) {
+              await updateCollectionPermissions(this.collectionId, null, this.shadowValue);
+            } else {
+              await updateItemPermissions(this.refcode, null, this.shadowValue);
+            }
             this.$emit("update:modelValue", [...this.shadowValue]);
           } else {
             this.shadowValue = [...this.value];
@@ -93,16 +110,29 @@ export default {
         }
       }
     },
-
     modelValue: {
       immediate: true,
       handler(newVal) {
-        this.shadowValue = [...newVal];
+        const newArray = Array.isArray(newVal) ? [...newVal] : [];
+        const currentArray = Array.isArray(this.shadowValue) ? this.shadowValue : [];
+
+        if (JSON.stringify(currentArray) !== JSON.stringify(newArray)) {
+          this.shadowValue = newArray;
+        }
       },
     },
   },
   async mounted() {
     this.outerDivRef = this.$refs.outerdiv;
+  },
+  methods: {
+    handleClick() {
+      if (this.openSharingModal) {
+        this.openSharingModal();
+        return;
+      }
+      this.isEditingGroups = !this.isEditingGroups;
+    },
   },
 };
 </script>

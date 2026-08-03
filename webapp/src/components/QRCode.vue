@@ -1,24 +1,26 @@
 <template>
   <div class="text-center">
-    <div class="qrcode-image">
-    <QRCodeVue3
-      :key="currentQRCodeUrl"
-      :value="currentQRCodeUrl"
-      :width="width"
-      :height="width"
-      :qr-options="{ typeNumber: 2, mode: 'Byte', errorCorrectionLevel: 'H' }"
-      :image-options="{ hideBackgroundDots: false, imageSize: 0, margin: 0 }"
-      :dots-options="{
-        type: 'square',
-        color: 'black',
-      }"
-      :background-options="{ color: '#ffffff' }"
-      :corners-square-options="{ type: 'square', color: 'black' }"
-      :corners-dot-options="{ type: 'square', color: 'black' }"
-      file-ext="png"
-      class="test"
-    />
-    </div>
+    <a :href="currentQRCodeUrl" target="_blank" rel="noopener noreferrer">
+      <div class="qrcode-image">
+        <QRCodeVue3
+          :key="qrCodeValue"
+          :value="qrCodeValue"
+          :width="width"
+          :height="width"
+          :qr-options="{ typeNumber: 2, mode: 'Byte', errorCorrectionLevel: 'H' }"
+          :image-options="{ hideBackgroundDots: false, imageSize: 0, margin: 0 }"
+          :dots-options="{
+            type: 'square',
+            color: 'black',
+          }"
+          :background-options="{ color: '#ffffff' }"
+          :corners-square-options="{ type: 'square', color: 'black' }"
+          :corners-dot-options="{ type: 'square', color: 'black' }"
+          file-ext="png"
+        />
+      </div>
+    </a>
+
     <div
       id="qrcode-text-label"
       :style="{ width: width }"
@@ -27,9 +29,28 @@
       {{ refcode }}
     </div>
 
-    <div class="mt-2">
-      <span v-if="!isPublicMode" class="badge bg-primary"></span>
+    <div class="mt-2 qrcode-status-panel">
+      <span v-if="!isPublicMode" class="badge bg-primary text-light">Private QR Code</span>
       <span v-else class="badge bg-warning text-dark">Public QR Code</span>
+    </div>
+
+    <div class="shareable-link mt-2 d-flex align-items-center" data-testid="shareable-link">
+      <a
+        :href="currentQRCodeUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-truncate small flex-grow-1"
+      >
+        {{ currentQRCodeUrl }}
+      </a>
+      <button
+        type="button"
+        class="btn btn-link btn-sm p-0 flex-shrink-0 ms-3"
+        :aria-label="copied ? 'Link copied to clipboard' : 'Copy shareable link to clipboard'"
+        @click="copyUrl"
+      >
+        <font-awesome-icon :icon="copied ? 'check' : 'copy'" />
+      </button>
     </div>
   </div>
 
@@ -40,20 +61,41 @@
     <small class="d-block mt-1">Checking existing tokens...</small>
   </div>
 
-  <div v-if="showTokenManagement">
-    <div v-if="!isPublicMode" class="mt-3">
-      <div class="alert alert-info">
-        <strong v-if="hasExistingToken">Public QR Code Exists:</strong>
-        <strong v-else>Generate Public QR Code:</strong>
-        <br />
-        <span v-if="hasExistingToken">
-          A public QR code already exists for this item. You can generate a new token. Both tokens
-          will remain valid until manually revoked by an administrator.
-        </span>
-        <span v-else>
-          This QR code requires authentication to access. You can generate a public QR code that
-          allows access without login.
-        </span>
+  <div v-if="!isPublicMode" class="mt-3 qrcode-generate-public-panel">
+    <div class="alert alert-info">
+      <strong v-if="hasExistingToken">Public QR Code Exists:</strong>
+      <strong v-else>Generate Public QR Code:</strong>
+      <br />
+      <span v-if="hasExistingToken">
+        A public QR code already exists for this item. You can generate a new token. Both tokens
+        will remain valid until manually revoked by an administrator.
+      </span>
+      <span v-else>
+        This QR code requires authentication to access. You can generate a public QR code that
+        allows access without login.
+      </span>
+    </div>
+
+    <button
+      class="btn btn-warning w-100"
+      :disabled="isGenerating"
+      @click.prevent="generatePublicQRCode()"
+    >
+      <span v-if="isGenerating">
+        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+        Generating...
+      </span>
+      <span v-else-if="hasExistingToken"> <i class="fas fa-plus me-2"></i>Generate New Token </span>
+      <span v-else> <i class="fas fa-unlock me-2"></i>Generate Public QR Code </span>
+    </button>
+  </div>
+
+  <div v-else class="mt-3">
+    <div class="alert alert-warning">
+      <strong><i class="fas fa-exclamation-triangle me-2"></i>Public QR Code Active</strong><br />
+      This QR code can be accessed by anyone with the link. No authentication required.
+      <div class="mt-2">
+        <small><strong>Created:</strong> {{ formattedCreationDate }}</small>
       </div>
 
       <button
@@ -96,8 +138,8 @@
   <div v-if="errorMessage" class="alert alert-danger mt-3">
     <i class="fas fa-exclamation-triangle me-2"></i>{{ errorMessage }}
   </div>
-  <!--
-  <div v-if="!federatedQR" class="alert alert-info">
+
+  <div v-if="!federatedQR" class="alert alert-info mt-3 qrcode-purl-warning">
     QR_CODE_RESOLVER_URL is not set to the federation resolver URL for this deployment.<br />
     Links embedded within QR codes generated here will only work if this <i>datalab</i> instance
     remains at the same URL.<br /><br />
@@ -145,6 +187,7 @@ export default {
       isGenerating: false,
       isInvalidating: false,
       errorMessage: null,
+      copied: false,
     };
   },
   computed: {
@@ -171,6 +214,10 @@ export default {
       const url = this.isPublicMode ? this.publicQRCodeUrl : this.privateQRCodeUrl;
       return url;
     },
+    qrCodeValue() {
+      // Keep QR payload short for fixed-size label generation.
+      return this.refcode;
+    },
     formattedCreationDate() {
       if (!this.tokenInfo?.created_at) return "Unknown";
 
@@ -192,6 +239,13 @@ export default {
     this.errorMessage = null;
   },
   methods: {
+    async copyUrl() {
+      await navigator.clipboard.writeText(this.currentQRCodeUrl);
+      this.copied = true;
+      setTimeout(() => {
+        this.copied = false;
+      }, 1500);
+    },
     async checkExistingToken() {
       this.isLoading = true;
       this.errorMessage = null;
@@ -332,14 +386,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-.qrcode-text-label {
-  font-family: var(--font-monospace);
-  font-size: 1.8rem;
-}
-.qrcode-image {
-  /* For some reason the QR code is rendered flipped horizontally */
-  transform: scale(-1.0, 1.0);
-}
-</style>

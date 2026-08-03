@@ -2,10 +2,11 @@
   <div
     ref="outerdiv"
     class="h-100 form-group clickable"
-    @click="isEditingCreators = !isEditingCreators"
+    data-testid="toggleable-creators"
+    @click="handleClick"
   >
-    <label id="creators" class="clickable">
-      Creators
+    <label class="clickable">
+      {{ label }}
       <font-awesome-icon
         id="edit-icon"
         class="pl-1"
@@ -17,8 +18,8 @@
     <div>
       <Creators
         v-if="!isEditingCreators"
-        :show-names="value.length <= 1"
-        aria-labelledby="creators"
+        :show-names="!value || value.length <= 1"
+        :aria-label="label"
         :creators="shadowValue"
       />
       <OnClickOutside
@@ -26,7 +27,7 @@
         :options="{ ignore: [outerDivRef] }"
         @trigger="isEditingCreators = false"
       >
-        <UserSelect v-model="shadowValue" aria-labelledby="creators" multiple @click.stop />
+        <UserSelect v-model="shadowValue" :aria-label="label" multiple @click.stop />
       </OnClickOutside>
     </div>
   </div>
@@ -38,7 +39,7 @@ import { DialogService } from "@/services/DialogService";
 import Creators from "@/components/Creators";
 import UserSelect from "@/components/UserSelect";
 import { OnClickOutside } from "@vueuse/components";
-import { updateItemPermissions } from "@/server_fetch_utils.js";
+import { updateItemPermissions, updateCollectionPermissions } from "@/server_fetch_utils.js";
 import { toRaw } from "vue";
 
 export default {
@@ -47,11 +48,17 @@ export default {
     Creators,
     OnClickOutside,
   },
+  inject: {
+    openSharingModal: { default: null },
+  },
   props: {
-    refcode: { type: String, required: true },
+    refcode: { type: String, required: false, default: null },
+    collectionId: { type: String, required: false, default: null },
+    label: { type: String, default: "Creators" },
     modelValue: {
       type: Array,
-      required: true,
+      required: false,
+      default: () => [],
     },
   },
   emits: ["update:modelValue"],
@@ -82,17 +89,22 @@ export default {
           return;
         }
         try {
-          // Check if the user has just removed all creators and reset if so
           if (this.shadowValue.length == 0) {
             throw new Error("You must have at least one creator.");
           }
           const confirmed = await DialogService.confirm({
             title: "Update Permissions",
-            message: "Are you sure you want to update the permissions of this item?",
+            message: `Are you sure you want to update the permissions of this ${
+              this.collectionId ? "collection" : "item"
+            }?`,
             type: "warning",
           });
           if (confirmed) {
-            await updateItemPermissions(this.refcode, this.shadowValue);
+            if (this.collectionId) {
+              await updateCollectionPermissions(this.collectionId, this.shadowValue);
+            } else {
+              await updateItemPermissions(this.refcode, this.shadowValue);
+            }
             this.$emit("update:modelValue", [...this.shadowValue]);
           } else {
             this.shadowValue = [...this.value];
@@ -110,14 +122,26 @@ export default {
     modelValue: {
       immediate: true,
       handler(newVal) {
-        if (this.shadowValue !== newVal) {
-          this.shadowValue = [...newVal];
+        const newArray = Array.isArray(newVal) ? [...newVal] : [];
+        const currentArray = Array.isArray(this.shadowValue) ? this.shadowValue : [];
+
+        if (JSON.stringify(currentArray) !== JSON.stringify(newArray)) {
+          this.shadowValue = newArray;
         }
       },
     },
   },
   async mounted() {
     this.outerDivRef = this.$refs.outerdiv; // we need to get the editIcon's ref to be accessible in the template so we can exclude it from the ClickOutside
+  },
+  methods: {
+    handleClick() {
+      if (this.openSharingModal) {
+        this.openSharingModal();
+        return;
+      }
+      this.isEditingCreators = !this.isEditingCreators;
+    },
   },
 };
 </script>

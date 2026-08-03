@@ -4,27 +4,23 @@
       <template #header>QR Code</template>
       <template #body>
         <div class="form-row">
-            <div class="qrcode-modal-flex-row d-flex align-items-center" style="gap: 1.5rem; min-height: 120px;">
-              <div ref="qrcode" class="qrcode-modal-left text-center" data-testid="qrcode">
-                  <QRCode :refcode="refcode" />
+          <div class="qrcode-modal-flex-row d-flex align-items-center">
+            <div ref="qrcode" class="qrcode-modal-left text-center" data-testid="qrcode">
+              <QRCode :refcode="refcode" />
+            </div>
+            <div class="qrcode-modal-right flex-grow-1">
+              <div class="qrcode-sample-name-label mb-2" data-testid="qrcode-sample-name-label">
+                {{ modalName }}
               </div>
-              <div class="qrcode-modal-right flex-grow-1">
-                <div
-                  class="qrcode-sample-name-label mb-2"
-                  data-testid="qrcode-sample-name-label"
-                  :style="nameFontSizeStyle"
-                >
-                  {{ name }}
-                </div>
-                <div class="qrcode-sample-chemform-label" data-testid="qrcode-sample-chemform-label">
-                  {{ chemform }}
-                </div>
+              <div class="qrcode-sample-chemform-label" data-testid="qrcode-sample-chemform-label">
+                {{ modalChemform }}
               </div>
             </div>
+          </div>
         </div>
       </template>
       <template #footer>
-        <button type="submit" class="btn btn-info" value="Print" @click="printQR">Print</button>
+        <button type="button" class="btn btn-info" value="Print" @click="printQR">Print</button>
         <button
           type="button"
           class="btn btn-secondary"
@@ -56,28 +52,47 @@ export default {
 
   emits: ["update:modelValue"],
   computed: {
-    nameFontSizeStyle() {
-      // Aggressively adjust font size based on name length
-      const base = 3.2; // rem
-      const min = 0.1; // rem (smaller minimum)
-      const maxLen = 15; // start shrinking after this many chars
-      if (!this.name) return { fontSize: base + 'rem', fontWeight: 800 };
-      let len = this.name.length;
-      let size = base;
-      if (len > maxLen) {
-        size = Math.max(min, base - (len - maxLen) * 0.05); // shrink faster
+    itemID() {
+      const direct = this.$store.state.refcode_to_id[this.refcode];
+      if (direct) {
+        return direct;
       }
-      return { fontSize: size + 'rem', fontWeight: 800 };
+
+      const allItemData = this.$store.state.all_item_data || {};
+      for (const [itemID, itemData] of Object.entries(allItemData)) {
+        if (itemData?.refcode === this.refcode || itemID === this.refcode) {
+          return itemID;
+        }
+      }
+
+      return null;
+    },
+    itemData() {
+      if (!this.itemID) {
+        return null;
+      }
+      return this.$store.state.all_item_data[this.itemID] || null;
+    },
+    modalName() {
+      return this.itemData?.name || "";
+    },
+    modalChemform() {
+      return this.itemData?.chemform || this.itemData?.characteristic_chemical_formula || "";
     },
   },
   methods: {
     printQR() {
       const qrHtml = this.$refs.qrcode.innerHTML;
-      const name = this.name || '';
-      const chemform = this.chemform || '';
+      const name = this.modalName || '';
+      const chemform = this.modalChemform || '';
       // Create print window
       const printWindow = window.open("", "", "height=480, width=1400");
       const doc = printWindow.document;
+
+      const basePath = process.env.BASE_URL || "/";
+      const normalizedBasePath = basePath.endsWith("/") ? basePath : `${basePath}/`;
+      const overrideCssHref = `${window.location.origin}${normalizedBasePath}custom/override.css`;
+
       // Build DOM using DOM methods
       const html = doc.createElement('html');
       const head = doc.createElement('head');
@@ -85,128 +100,10 @@ export default {
       title.textContent = 'QR Code';
       head.appendChild(title);
 
-      // Inject print CSS directly for maximum reliability
-      const printStyle = doc.createElement('style');
-      printStyle.type = 'text/css';
-      printStyle.textContent = `
-@media print {
-  @page {
-    size: 70mm 24mm;
-    padding: 3mm;
-  }
-  html, body {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-  }
-  .label-print-media {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-  }
-  .label-print-media.qrcode-modal-flex-row {
-    display: grid !important;
-    grid-template-columns: 30% 70%;
-    grid-template-rows: 100%;
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    min-height: 100% !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-  }
-  .label-print-media .qrcode-modal-left {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    min-height: 100% !important;
-    box-sizing: border-box !important;
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .label-print-media .qrcode-modal-right {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    min-height: 0 !important;
-    box-sizing: border-box !important;
-    grid-column: 2;
-    grid-row: 1;
-    margin-left: 0 !important;
-    align-items: center;
-  }
-  .label-print-media .qrcode-sample-name-label,
-  .label-print-media .qrcode-sample-chemform-label {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    box-sizing: border-box !important;
-    display: block !important;
-    text-align: left !important;
-    text-overflow: ellipsis !important;
-    white-space: normal !important;
-  }
-  .label-print-media .qrcode-image,
-  .label-print-media .qrcode-text-label,
-  .label-print-media .qrcode-sample-name-label,
-  .label-print-media .qrcode-sample-chemform-label {
-    max-height: 100% !important;
-    min-height: 0 !important;
-    box-sizing: border-box !important;
-  }
-  .label-print-media .qrcode-image img {
-    transform: scale(-1.0, 1.0);
-    width: min(80vh, 80vw) !important;
-    height: min(80vh, 80vw) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    position: relative !important;
-  }
-  .label-print-media .qrcode-image > svg,
-  .label-print-media .qrcode-image > img {
-    width: 100% !important;
-    height: 100% !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
-    box-sizing: border-box !important;
-    display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-  .label-print-media .qrcode-text-label {
-    font-size: 14vh !important;
-    font-weight: 400;
-  }
-  .label-print-media .qrcode-sample-name-label {
-    font-size: 24vh;
-    font-weight: 800;
-  }
-  .label-print-media .qrcode-sample-chemform-label {
-    font-size: 18vh !important;
-    font-family: monospace;
-  }
-}
-      `;
-      head.appendChild(printStyle);
+      const overrideLink = doc.createElement('link');
+      overrideLink.rel = 'stylesheet';
+      overrideLink.href = overrideCssHref;
+      head.appendChild(overrideLink);
 
       html.appendChild(head);
       const body = doc.createElement('body');
@@ -217,6 +114,11 @@ export default {
       const left = doc.createElement('div');
       left.className = 'qrcode-modal-left';
       left.innerHTML = qrHtml;
+      left
+        .querySelectorAll(
+          '.qrcode-status-panel, .shareable-link, .qrcode-generate-public-panel, .qrcode-purl-warning, .alert, button',
+        )
+        .forEach((element) => element.remove());
       // Right (labels)
       const right = doc.createElement('div');
       right.className = 'qrcode-modal-right';
@@ -246,7 +148,19 @@ export default {
         setTimeout(closePrintWindow, 250);
         printWindow.removeEventListener('focus', onFocus);
       });
-      printWindow.print();
+
+      const triggerPrint = () => {
+        // Small delay helps some label-printer drivers fully apply external CSS.
+        setTimeout(() => {
+          printWindow.print();
+        }, 50);
+      };
+
+      overrideLink.onload = triggerPrint;
+      overrideLink.onerror = triggerPrint;
+
+      // Fallback in case onload is not fired by the browser/driver.
+      setTimeout(triggerPrint, 300);
     },
   },
 };

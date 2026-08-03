@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator, validator
 
 from pydatalab.models.blocks import DataBlockResponse
 from pydatalab.models.people import Group, Person
@@ -106,12 +106,16 @@ class HasSynthesisInfo(BaseModel):
 
         constituents_set = set()
         if values.get("synthesis_constituents") is not None:
-            existing_parent_relationship_ids = set()
+            existing_parent_relationships = {}
             if values.get("relationships") is not None:
-                existing_parent_relationship_ids = {
-                    relationship.refcode or relationship.item_id
+                # Index by refcode *and* item_id so a stored relationship carrying an
+                # item_id still matches a refcode-enriched constituent (and vice-versa).
+                existing_parent_relationships = {
+                    identifier: relationship
                     for relationship in values["relationships"]
                     if relationship.relation == RelationshipType.PARENT
+                    for identifier in (relationship.refcode, relationship.item_id)
+                    if identifier
                 }
             else:
                 values["relationships"] = []
@@ -121,20 +125,35 @@ class HasSynthesisInfo(BaseModel):
                 if isinstance(constituent.item, InlineSubstance):
                     continue
 
-                constituent_id = constituent.item.refcode or constituent.item.item_id
+                refcode = constituent.item.refcode
+                item_id = constituent.item.item_id
 
-                if constituent_id not in existing_parent_relationship_ids:
+                relationship = existing_parent_relationships.get(
+                    refcode
+                ) or existing_parent_relationships.get(item_id)
+                if relationship is None:
                     relationship = TypedRelationship(
                         relation=RelationshipType.PARENT,
-                        refcode=constituent.item.refcode,
-                        item_id=constituent.item.item_id,
+                        refcode=refcode,
+                        item_id=item_id,
                         type=constituent.item.type,
                         description="Is a constituent of",
                     )
                     values["relationships"].append(relationship)
+                else:
+                    # Back-fill any identifier missing from the stored relationship
+                    relationship.refcode = relationship.refcode or refcode
+                    relationship.item_id = relationship.item_id or item_id
+
+                # Register the relationship's identifiers in the index so a later
+                # constituent referencing the same entry matches it rather than
+                # appending a duplicate within this same validation pass.
+                for identifier in (relationship.refcode, relationship.item_id):
+                    if identifier:
+                        existing_parent_relationships[identifier] = relationship
 
                 # Accumulate all constituent IDs in a set to filter those that have been deleted
-                constituents_set.add(constituent_id)
+                constituents_set.update(i for i in (refcode, item_id) if i)
 
         # Finally, filter out any parent relationships with item that were removed
         # from the synthesis constituents
@@ -142,7 +161,8 @@ class HasSynthesisInfo(BaseModel):
             rel
             for rel in values["relationships"]
             if not (
-                (rel.refcode or rel.item_id) not in constituents_set
+                rel.refcode not in constituents_set
+                and rel.item_id not in constituents_set
                 and rel.relation == RelationshipType.PARENT
                 and rel.type in ("samples", "starting_materials")
             )
@@ -151,12 +171,48 @@ class HasSynthesisInfo(BaseModel):
         return values
 
 
-class HasChemInfo:
-    smile: str | None = Field(None)
+class HasSubstanceInfo(BaseModel):
+    """Trait mixin for models that have substance information."""
+
+    chemform: str | None = Field(
+        example=["Na3P", "Na<sub>3</sub>P", "LiNiO2@C", "Na3+xP", "LiNi1/3Co0.1Mn0.1O2"],
+    )
+    """A string representation of the chemical formula or composition associated with this sample.
+
+    The representation is relatively free-form; clients are expected parse and interpret HTML markup for subscripts
+    and accept unicode characters for greek letters.
+
+    """
+
+    smiles: str | None = Field(None, aliases=["SMILES", "smiles_representation"])
     """A SMILES string representation of the chemical structure associated with this sample."""
+
     inchi: str | None = Field(None)
-    """An InChI string representation of the chemical structure associated with this sample."""
+    """An International Chemical Identifier (InChI) string representation of chemicals/molecules associated with this sample."""
+
     inchi_key: str | None = Field(None)
-    """An InChI key representation of the chemical structure associated with this sample."""
-    """A unique key derived from the InChI string."""
-    chemform: str | None = Field(None)
+    """A unique key derived from the InChI."""
+
+    GHS_codes: str | None = Field(
+        alias="GHS H-codes",
+        examples=["H224", "H303, H316, H319"],
+    )
+    """A string describing any GHS hazard codes associated with this item. See https://pubchem.ncbi.nlm.nih.gov/ghs/ for code definitions."""
+
+    molar_mass: float | None = Field(alias="Molecular Weight")
+    """Mass per formula unit, in g/mol."""
+
+    CAS: str | None = Field(alias="Substance CAS")
+    """The CAS Registry Number for the substance described by this entry."""
+
+    @validator("molar_mass")
+    def add_molar_mass(cls, v, values):
+        from periodictable import formula
+
+        if v is None and values.get("chemform"):
+            try:
+                return formula(values.get("chemform")).mass
+            except Exception:
+                return None
+
+        return v

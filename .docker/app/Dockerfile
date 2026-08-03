@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
-FROM node:20-bullseye AS build
+FROM node:22.22-bullseye-slim AS build
 SHELL ["/bin/bash", "--login", "-c"]
 
 WORKDIR /app
 
 EXPOSE 8081
+
+RUN apt update && apt install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 COPY webapp/package.json webapp/yarn.lock ./
 
@@ -21,11 +23,15 @@ ARG VUE_APP_EDITABLE_INVENTORY=magic-setting
 ARG VUE_APP_WEBSITE_TITLE=magic-title
 ARG VUE_APP_QR_CODE_RESOLVER_URL=magic-qr-code-resolver-url
 ARG VUE_APP_AUTOMATICALLY_GENERATE_ID_DEFAULT=magic-generate-id-setting
+# Version source for scripts/get-version.js. Provided as a build arg so the
+# build layer doesn't depend on `.git` (which would invalidate cache every commit).
+ARG VUE_APP_GIT_VERSION=0.0.0+ci
+ENV VUE_APP_GIT_VERSION=${VUE_APP_GIT_VERSION}
 
 COPY webapp ./
-RUN --mount=type=bind,target=/.git,src=./.git VUE_APP_GIT_VERSION=$(node scripts/get-version.js) /node_modules/.bin/vue-cli-service build
+RUN /node_modules/.bin/vue-cli-service build
 
-FROM node:20-bullseye AS production
+FROM node:22.22-bullseye-slim AS production
 
 ENV PATH=$PATH:/node_modules/.bin
 COPY ./.docker/app_entrypoint.sh /app/
@@ -37,4 +43,4 @@ RUN --mount=type=cache,target=/root/.cache/yarn yarn install --frozen-lockfile -
 
 CMD [ "/bin/bash", "-c", "/app/app_entrypoint.sh" ]
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD curl --fail http://localhost:8081 || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD node -e "fetch('http://localhost:8081').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"

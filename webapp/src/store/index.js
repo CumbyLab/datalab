@@ -18,6 +18,7 @@ export default createStore({
     equipment_list: null,
     starting_material_list: null,
     collection_list: null,
+    groups_list: null,
     saved_status_items: {},
     saved_status_blocks: {},
     saved_status_collections: {},
@@ -61,8 +62,21 @@ export default createStore({
         page: 0,
         rows: 20,
       },
+      users: {
+        page: 0,
+        rows: 20,
+      },
+      tokens: {
+        page: 0,
+        rows: 20,
+      },
+      groups: {
+        page: 0,
+        rows: 10,
+      },
     },
     block_errors: {},
+    block_infos: {},
     apiConfig: {
       maxUploadBytes: null,
     },
@@ -85,6 +99,9 @@ export default createStore({
     setCollectionList(state, collectionSummaries) {
       // collectionSummaries is an array of json objects summarizing the available collections
       state.collection_list = collectionSummaries || [];
+    },
+    setGroupsList(state, groups) {
+      state.groups_list = groups;
     },
     setDisplayName(state, displayName) {
       state.currentUserDisplayName = displayName;
@@ -197,6 +214,9 @@ export default createStore({
       // payload should have the following fields:
       // collection_id, data, child_items
       state.all_collection_data[payload.collection_id] = payload.data;
+      if (payload.child_items !== undefined) {
+        state.all_collection_children[payload.collection_id] = payload.child_items;
+      }
       state.saved_status_collections[payload.collection_id] = true;
     },
     setCollectionSampleList(state, payload) {
@@ -281,7 +301,11 @@ export default createStore({
       //requires the following fields in payload:
       // item_id, block_data
       Object.assign(state.all_collection_data[payload.collection_id], payload.block_data);
-      state.saved_status_collections[payload.collection_id] = false;
+      if (payload.block_data.creators || payload.block_data.groups) {
+        return;
+      } else {
+        state.saved_status_collections[payload.collection_id] = false;
+      }
     },
     setItemSaved(state, payload) {
       // requires the following fields in payload:
@@ -334,7 +358,7 @@ export default createStore({
       }
       state.saved_status_items[payload.item_id] = false;
     },
-    setBlockUpdating(state, block_id) {
+    async setBlockUpdating(state, block_id) {
       state.updating[block_id] = true;
       state.updatingDelayed[block_id] = true;
     },
@@ -397,6 +421,13 @@ export default createStore({
         delete state.block_errors[block_id];
       }
     },
+    setBlockInfo(state, { block_id, info = null }) {
+      if (info) {
+        state.block_infos[block_id] = info;
+      } else {
+        delete state.block_infos[block_id];
+      }
+    },
     setApiConfig(state, config) {
       state.apiConfig = config;
     },
@@ -410,6 +441,12 @@ export default createStore({
         data,
         timestamp: Date.now(),
       };
+    },
+    setBlockProcessing(state, { block_id, task_id }) {
+      if (!state.blockProcessingTasks) {
+        state.blockProcessingTasks = {};
+      }
+      state.blockProcessingTasks[block_id] = task_id;
     },
   },
   getters: {

@@ -14,6 +14,8 @@ class AuthMechanisms(BaseModel):
     github: bool = False
     orcid: bool = False
     email: bool = False
+    google: bool = False
+    microsoft: bool = False
 
 
 class AIIntegrations(BaseModel):
@@ -103,6 +105,12 @@ def check_feature_flags(app):
                 "No secret key provided, please set `CONFIG.SECRET_KEY` or the `PYDATALAB_SECRET_KEY` environment variable."
             )
 
+        if os.environ.get("PYDATALAB_ALLOW_INSECURE_SECRET_KEY") == "1":
+            LOGGER.critical(
+                "Insecure secret key allowed via `PYDATALAB_ALLOW_INSECURE_SECRET_KEY`, this MUST NOT be used in production."
+            )
+            return
+
         _check_key_strength(CONFIG.SECRET_KEY)
 
     def _check_secret_and_warn(secret: str, error: str, environ: bool = False) -> bool:
@@ -151,7 +159,23 @@ def check_feature_flags(app):
         environ=True,
     ):
         FEATURE_FLAGS.ai_integrations.anthropic = True
+    if _check_secret_and_warn(
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "No Google OAuth client ID provided, Google login will not work",
+    ) and _check_secret_and_warn(
+        "GOOGLE_OAUTH_CLIENT_SECRET",
+        "No Google OAuth client secret provided, Google login will not work",
+    ):
+        FEATURE_FLAGS.auth_mechanisms.google = True
 
+    if _check_secret_and_warn(
+        "MICROSOFT_OAUTH_CLIENT_ID",
+        "No Microsoft OAuth client ID provided, Microsoft login will not work",
+    ) and _check_secret_and_warn(
+        "MICROSOFT_OAUTH_CLIENT_SECRET",
+        "No Microsoft OAuth client secret provided, Microsoft login will not work",
+    ):
+        FEATURE_FLAGS.auth_mechanisms.microsoft = True
     if CONFIG.DEBUG:
         LOGGER.warning("Running with debug logs enabled")
 

@@ -131,7 +131,7 @@
 import { updateBlockFromServer } from "@/server_fetch_utils.js"; // Assuming this path is correct
 
 export default {
-  name: "MultiFileSelector",
+  name: "FileMultiSelect",
   props: {
     modelValue: {
       // Now expects an array of file IDs
@@ -330,7 +330,9 @@ export default {
           this.item_id,
           this.block_id,
           this.$store.state.all_item_data[this.item_id]["blocks_obj"][this.block_id],
-        );
+        ).catch((error) => {
+          console.error("Error updating block:", error);
+        });
       }
     },
     checkFileList() {

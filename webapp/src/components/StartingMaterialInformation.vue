@@ -3,18 +3,11 @@
     <div class="row">
       <div class="col">
         <div id="starting-material-information" class="form-row">
-          <div class="form-group col-sm-4 pr-2 col-6">
+          <div class="form-group col-sm-6 pr-2">
             <label for="samp-name">Name</label>
             <input id="samp-name" v-model="Name" class="form-control" />
           </div>
-          <div class="form-group col-sm-4 pr-2 col-6">
-            <label for="startmat-chemform">Chemical formula</label>
-            <ChemFormulaInput v-if="isEditable" id="startmat-chemform" v-model="ChemForm" />
-            <span v-if="!isEditable" class="form-control-plaintext" readonly>
-              <ChemicalFormula id="startmat-chemform" :formula="ChemForm" />
-            </span>
-          </div>
-          <div class="form-group col-sm-4 col-6">
+          <div class="form-group col-sm-6">
             <label for="startmat-date-acquired">Date acquired</label>
             <StyledInput
               id="startmat-date-acquired"
@@ -30,30 +23,56 @@
             <label for="startmat-refcode">Refcode</label>
             <div id="startmat-refcode"><FormattedRefcode :refcode="Refcode" /></div>
           </div>
-          <div v-if="Barcode" class="form-group col-md-3 col-sm-4 col-6">
-            <label for="startmat-barcode">Barcode</label>
-            <div id="startmat-barcode"><FormattedBarCode :barcode="Barcode" /></div>
-          </div>
-          <div class="form-group col-md-4 col-sm-4 col-6">
-            <ToggleableCollectionFormGroup v-model="Collections" />
-          </div>
-          <div class="form-group col-md-5 col-sm-4 col-12">
+          <div class="form-group col-md-3 col-sm-4 col-12">
             <ToggleableItemStatusFormGroup
               v-model="Status"
               :possible-item-statuses="possibleItemStatuses"
             />
           </div>
+          <div class="form-group col-md-3 col-sm-4 col-6">
+            <ToggleableCollectionFormGroup v-model="Collections" />
+          </div>
+          <div v-if="Barcode" class="form-group col-md-3 col-sm-4 col-6">
+            <label for="startmat-barcode">Barcode</label>
+            <div id="startmat-barcode"><FormattedBarCode :barcode="Barcode" /></div>
+          </div>
         </div>
+
+        <div class="form-row">
+          <div class="form-group col-6 pb-3">
+            <ToggleableCreatorsFormGroup v-model="ItemCreators" :refcode="Refcode" />
+          </div>
+          <div class="form-group col-6 pb-3">
+            <ToggleableGroupsFormGroup v-model="ItemGroups" :refcode="Refcode" />
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-group col-lg-12 col-sm-12">
             <label for="startmat-location">Location</label>
-            <StyledInput id="startmat-location" v-model="Location" :readonly="!isEditable" />
+            <AutoComplete
+              v-model="Location"
+              input-id="startmat-location"
+              :suggestions="filteredLocations"
+              :disabled="!isEditable"
+              class="form-control p-0 border-0"
+              input-class="form-control"
+              @complete="filterLocations"
+            />
           </div>
         </div>
         <div class="form-row">
           <div class="form-group col-lg-3 col-sm-4">
             <label for="startmat-supplier">Supplier</label>
-            <StyledInput id="startmat-supplier" v-model="Supplier" :readonly="!isEditable" />
+            <AutoComplete
+              v-model="Supplier"
+              input-id="startmat-supplier"
+              :suggestions="filteredSuppliers"
+              :disabled="!isEditable"
+              class="form-control p-0 border-0"
+              input-class="form-control"
+              @complete="filterSuppliers"
+            />
           </div>
           <div class="form-group col-lg-3 col-sm-4">
             <label for="startmat-purity">Chemical purity</label>
@@ -61,13 +80,6 @@
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group col-lg-3 col-sm-3 col-6">
-            <label for="startmat-cas">CAS</label>
-            <a v-if="CAS" :href="'https://commonchemistry.cas.org/detail?cas_rn=' + CAS"
-              ><font-awesome-icon icon="search" class="fixed-width ml-2"
-            /></a>
-            <StyledInput id="startmat-cas" v-model="CAS" :readonly="!isEditable" />
-          </div>
           <div class="form-group col-lg-3 col-sm-3 col-6">
             <label for="startmat-date-opened">Date opened</label>
             <StyledInput
@@ -78,14 +90,15 @@
             />
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group col-12">
-            <GHSHazardInformation v-model="GHS" :editable="isEditable" />
-          </div>
-        </div>
       </div>
       <div class="col-md-4">
         <ItemRelationshipVisualization :item_id="item_id" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <SubstanceInformation class="mt-3" :item_id="item_id" :is-editable="isEditable" />
       </div>
     </div>
 
@@ -105,9 +118,8 @@
 <script>
 import { createComputedSetterForItemField } from "@/field_utils.js";
 import TiptapInline from "@/components/TiptapInline";
-import ChemicalFormula from "@/components/ChemicalFormula";
-import ChemFormulaInput from "@/components/ChemFormulaInput";
 import TableOfContents from "@/components/TableOfContents";
+import SubstanceInformation from "@/components/SubstanceInformation";
 import ToggleableCollectionFormGroup from "@/components/ToggleableCollectionFormGroup";
 import ToggleableItemStatusFormGroup from "@/components/ToggleableItemStatusFormGroup";
 import FormattedRefcode from "@/components/FormattedRefcode";
@@ -115,15 +127,17 @@ import FormattedBarCode from "@/components/FormattedBarcode";
 import StyledInput from "@/components/StyledInput";
 import SynthesisInformation from "@/components/SynthesisInformation";
 import ItemRelationshipVisualization from "@/components/ItemRelationshipVisualization";
-import GHSHazardInformation from "@/components/GHSHazardInformation";
+import ToggleableCreatorsFormGroup from "@/components/ToggleableCreatorsFormGroup";
+import ToggleableGroupsFormGroup from "@/components/ToggleableGroupsFormGroup";
 
+import AutoComplete from "primevue/autocomplete";
+import { getStartingMaterialList, getEquipmentList } from "@/server_fetch_utils.js";
 import { EDITABLE_INVENTORY } from "@/resources.js";
 
 export default {
   components: {
+    AutoComplete,
     StyledInput,
-    ChemicalFormula,
-    ChemFormulaInput,
     ItemRelationshipVisualization,
     TiptapInline,
     ToggleableCollectionFormGroup,
@@ -132,16 +146,21 @@ export default {
     FormattedRefcode,
     FormattedBarCode,
     SynthesisInformation,
-    GHSHazardInformation,
+    SubstanceInformation,
+    ToggleableCreatorsFormGroup,
+    ToggleableGroupsFormGroup,
   },
   props: {
     item_id: { type: String, required: true },
   },
   data() {
     return {
+      filteredSuppliers: [],
+      filteredLocations: [],
       tableOfContentsSections: [
         { title: "Starting Material Information", targetID: "starting-material-information" },
         { title: "Table of Contents", targetID: "table-of-contents" },
+        { title: "Substance Information", targetID: "substance-information" },
         { title: "Synthesis Information", targetID: "synthesis-information" },
       ],
     };
@@ -152,11 +171,8 @@ export default {
     },
     ItemID: createComputedSetterForItemField("item_id"),
     Name: createComputedSetterForItemField("name"),
-    CAS: createComputedSetterForItemField("CAS"),
-    GHS: createComputedSetterForItemField("GHS_codes"),
     DateAcquired: createComputedSetterForItemField("date"),
     DateOpened: createComputedSetterForItemField("date_opened"),
-    ChemForm: createComputedSetterForItemField("chemform"),
     Supplier: createComputedSetterForItemField("supplier"),
     ChemicalPurity: createComputedSetterForItemField("chemical_purity"),
     Location: createComputedSetterForItemField("location"),
@@ -164,6 +180,8 @@ export default {
     Collections: createComputedSetterForItemField("collections"),
     Refcode: createComputedSetterForItemField("refcode"),
     Status: createComputedSetterForItemField("status"),
+    ItemCreators: createComputedSetterForItemField("creators"),
+    ItemGroups: createComputedSetterForItemField("groups"),
     schema() {
       return this.$store.state.schemas[this.item?.type];
     },
@@ -171,9 +189,46 @@ export default {
       return this.schema?.attributes?.schema?.definitions?.StartingMaterialsStatus?.enum;
     },
     Barcode: createComputedSetterForItemField("barcode"),
+    uniqueSuppliers() {
+      return [
+        ...new Set(
+          (this.$store.state.starting_material_list || [])
+            .map((item) => item.supplier)
+            .filter(Boolean),
+        ),
+      ].sort();
+    },
+    uniqueLocations() {
+      return [
+        ...new Set(
+          [
+            ...(this.$store.state.starting_material_list || []),
+            ...(this.$store.state.equipment_list || []),
+          ]
+            .map((item) => item.location)
+            .filter(Boolean),
+        ),
+      ].sort();
+    },
   },
   created() {
     this.isEditable = EDITABLE_INVENTORY;
+    if (this.$store.state.starting_material_list === null) {
+      getStartingMaterialList();
+    }
+    if (this.$store.state.equipment_list === null) {
+      getEquipmentList();
+    }
+  },
+  methods: {
+    filterSuppliers(event) {
+      const query = event.query.toLowerCase();
+      this.filteredSuppliers = this.uniqueSuppliers.filter((s) => s.toLowerCase().includes(query));
+    },
+    filterLocations(event) {
+      const query = event.query.toLowerCase();
+      this.filteredLocations = this.uniqueLocations.filter((l) => l.toLowerCase().includes(query));
+    },
   },
 };
 </script>

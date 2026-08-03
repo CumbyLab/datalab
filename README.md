@@ -1,3 +1,8 @@
+---
+title: Introduction
+---
+
+
 # <div align="center"><i>datalab</i></div>
 
 <div align="center" style="padding-bottom: 5px">
@@ -139,6 +144,12 @@ Importantly, *datalab* stores a network of interconnected research objects in th
 
 This software is released under the conditions of the MIT license.
 Please see [LICENSE](./LICENSE) for the full text of the license.
+
+## Citation
+
+Should you use _datalab_ in your research, please consider citing the following preprint:
+
+> Matthew L. Evans, Joshua D. Bocarsly, Benjamin Charmes, Ben E. Smith, Gian-Marco Rignanese, David Waroquiers, Clare P. Grey, **datalab: Federated data management infrastructure for materials chemistry and beyond**, ChemRxiv (2026). DOI: [10.26434/chemrxiv.15001945/v1](https://doi.org/10.26434/chemrxiv.15001945/v1)
 
 ## Contact
 

@@ -4,9 +4,7 @@ keywords = ["research data management", "materials", "chemistry"]
 description = "datalab is a research data management platform for materials science and chemistry."
 readme = "README.md"
 license = "MIT"
-authors = [
-    {name = "datalab development team", email = "dev@datalab-org.io"},
-]
+authors = [{ name = "datalab development team", email = "dev@datalab-org.io" }]
 dynamic = ["version"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -28,6 +26,7 @@ dependencies = [
     "pandas[excel] ~= 2.2",
     "pymongo ~= 4.7",
     "deepdiff ~= 8.1",
+    "tomlkit ~= 0.14",
 ]
 
 [project.urls]
@@ -37,7 +36,7 @@ documentation = "https://docs.datalab-org.io"
 changelog = "https://github.com/datalab-org/datalab/releases"
 
 [build-system]
-requires = ["setuptools >= 77.0.3", "setuptools_scm ~= 8.1", "wheel"]
+requires = ["setuptools >= 77.0.3", "setuptools_scm>=8.1,<10.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
@@ -57,7 +56,7 @@ server = [
     "APScheduler ~= 3.10",
     "Werkzeug ~= 3.0",
     "python-dotenv ~= 1.0",
-    "pillow ~= 11.0",
+    "pillow>=11,<13",
     "pyjwt ~= 2.9",
     "invoke ~= 2.2",
 ]
@@ -65,9 +64,10 @@ apps = [
     # General
     "scipy ~= 1.13",
     # NMR
-    "nmrglue ~= 0.12",
+    "nmrglue ~= 0.11",
     # Electrochemistry
-    "navani >= 0.1.13",
+    "navani >= 0.1.20",
+    "pyarrow ~= 23.0.1",
     # Raman
     "pybaselines ~= 1.1",
     "renishawwire >= 0.1.16",
@@ -79,8 +79,8 @@ apps = [
 ]
 
 app-plugins-git = [
-    # Insitu
     "datalab-app-plugin-insitu",
+    "datalab-app-plugin-xps",
 ]
 
 chat = [
@@ -89,9 +89,9 @@ chat = [
     "langchain-openai ~= 0.1",
     "langchain-anthropic ~= 0.1",
     "tiktoken ~= 0.7",
-    "transformers ~= 4.42",
+    "transformers ~= 5.5",
 ]
-deploy = ["gunicorn ~= 23.0"]
+deploy = ["gunicorn ~= 25.3"]
 all = ["datalab-server[apps,server,chat]"]
 
 [tool.mypy]
@@ -106,7 +106,7 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "Q", "DTZ", "S", "G"]
 ignore = ["E501", "E402"]
-per-file-ignores = {"tests/*" = ["S101"]}
+per-file-ignores = { "tests/*" = ["S101"] }
 
 fixable = ["A", "B", "C", "D", "E", "F", "I", "S", "G"]
 unfixable = []
@@ -120,28 +120,36 @@ known-first-party = ["pydatalab"]
 
 [dependency-groups]
 dev = [
-    "pytest ~= 8.2",
-    "pytest-cov ~= 5.0",
+    "pytest>=8.2,<10.0",
+    "pytest-cov>=5,<8",
     "pytest-dependency ~= 0.6",
     "pytest-memray ~= 1.8",
     "pre-commit ~= 4.0",
     "mkdocs ~= 1.6",
     "mkdocs-material ~= 9.5",
-    "mkdocstrings[python] ~= 0.29",
+    "mkdocstrings[python] ~= 1.0",
     "docstring-inheritance ~= 2.2",
     "griffe-inherited-docstrings ~= 1.1",
     "mkdocs-awesome-pages-plugin ~= 2.9",
     "markdown-callouts ~= 0.4",
 ]
 
+[tool.uv]
+# Do not allow installing third-party deps that are very young
+exclude-newer = "1 week"
+# But allow deps we manage ourselves to be newer
+exclude-newer-package = { "navani" = false, "datalab-org-galvani" = false, "datalab-app-plugin-insitu" = false, "datalab-app-plugin-xps" = false }
+
 [tool.uv.sources]
-datalab-app-plugin-insitu = { git = "https://github.com/datalab-org/datalab-app-plugin-insitu.git", rev = "v0.3.2" }
-nmrglue = { git = "https://github.com/jjhelmus/nmrglue.git", rev = "b6408751bf18801a0a4ce084acf4d31335e2b02a" }  # TODO: Update when new release is made
+datalab-app-plugin-insitu = { git = "https://github.com/datalab-org/datalab-app-plugin-insitu.git", rev = "v0.4.1" }
+datalab-app-plugin-xps = { git = "https://github.com/datalab-industries/datalab-app-plugin-xps.git", rev = "v0.2.0" }
+nmrglue = { git = "https://github.com/jjhelmus/nmrglue.git", rev = "b6408751bf18801a0a4ce084acf4d31335e2b02a" }       # TODO: Update when new release is made
 
 [tool.pytest.ini_options]
 filterwarnings = [
     "error",
     "ignore:.*Capacity columns are not equal, replacing with new capacity column calculated from current and time columns and renaming the old capacity column to Old Capacity:UserWarning",
+    "ignore:.*Time column for each file does not start at 0.*:UserWarning",
     "ignore:.*np.bool8*:DeprecationWarning",
     "ignore::pytest.PytestUnraisableExceptionWarning",
     "ignore:.*JCAMP-DX key without value*:UserWarning",
@@ -178,9 +186,7 @@ authorized_licenses = [
     "cmu license (MIT-CMU)",
     "Mozilla Public License 2.0",
 ]
-unauthorized_licenses = [
-    "\bgpl",
-]
+unauthorized_licenses = ["\bgpl"]
 as_regex = true
 
 [tool.liccheck.authorized_packages]
