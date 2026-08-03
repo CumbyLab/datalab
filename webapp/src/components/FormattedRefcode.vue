@@ -18,7 +18,7 @@
     {{ refcode }}
   </span>
   <div v-if="enableQRCode">
-  <QRCodeModal v-model="QRCodeModalOpen" :refcode="refcode" :name="name" :chemform="chemform" />
+    <QRCodeModal v-model="QRCodeModalOpen" :refcode="refcode" />
   </div>
 </template>
 
@@ -33,14 +33,6 @@ export default {
     refcode: {
       type: String,
       required: true,
-    },
-    name: {
-      type: String,
-      default: '',
-    },
-    chemform: {
-      type: String,
-      default: '',
     },
     enableClick: {
       type: Boolean,

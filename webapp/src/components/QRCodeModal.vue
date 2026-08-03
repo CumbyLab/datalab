@@ -10,10 +10,10 @@
             </div>
             <div class="qrcode-modal-right flex-grow-1">
               <div class="qrcode-sample-name-label mb-2" data-testid="qrcode-sample-name-label">
-                {{ name }}
+                {{ modalName }}
               </div>
               <div class="qrcode-sample-chemform-label" data-testid="qrcode-sample-chemform-label">
-                {{ chemform }}
+                {{ modalChemform }}
               </div>
             </div>
           </div>
@@ -46,16 +46,43 @@ export default {
   props: {
     modelValue: Boolean,
     refcode: { type: String, required: true },
-    name: { type: String, default: '' },
-    chemform: { type: String, default: '' },
   },
 
   emits: ["update:modelValue"],
+  computed: {
+    itemID() {
+      const direct = this.$store.state.refcode_to_id[this.refcode];
+      if (direct) {
+        return direct;
+      }
+
+      const allItemData = this.$store.state.all_item_data || {};
+      for (const [itemID, itemData] of Object.entries(allItemData)) {
+        if (itemData?.refcode === this.refcode || itemID === this.refcode) {
+          return itemID;
+        }
+      }
+
+      return null;
+    },
+    itemData() {
+      if (!this.itemID) {
+        return null;
+      }
+      return this.$store.state.all_item_data[this.itemID] || null;
+    },
+    modalName() {
+      return this.itemData?.name || "";
+    },
+    modalChemform() {
+      return this.itemData?.chemform || this.itemData?.characteristic_chemical_formula || "";
+    },
+  },
   methods: {
     printQR() {
       const qrHtml = this.$refs.qrcode.innerHTML;
-      const name = this.name || '';
-      const chemform = this.chemform || '';
+      const name = this.modalName || '';
+      const chemform = this.modalChemform || '';
       // Create print window
       const printWindow = window.open("", "", "height=480, width=1400");
       const doc = printWindow.document;
@@ -119,7 +146,19 @@ export default {
         setTimeout(closePrintWindow, 250);
         printWindow.removeEventListener('focus', onFocus);
       });
-      printWindow.print();
+
+      const triggerPrint = () => {
+        // Small delay helps some label-printer drivers fully apply external CSS.
+        setTimeout(() => {
+          printWindow.print();
+        }, 50);
+      };
+
+      overrideLink.onload = triggerPrint;
+      overrideLink.onerror = triggerPrint;
+
+      // Fallback in case onload is not fired by the browser/driver.
+      setTimeout(triggerPrint, 300);
     },
   },
 };

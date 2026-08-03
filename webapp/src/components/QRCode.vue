@@ -356,29 +356,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-.qrcode-text-label {
-  font-family: var(--font-monospace);
-  font-size: 1.8rem;
-}
-
-.qrcode-image {
-  /* Deliberate horizontal flip to match main branch behavior. */
-  transform: scale(-1, 1);
-}
-
-.shareable-link {
-  border: 1px solid #dee2e6;
-  border-radius: 0.25rem;
-  padding: 0.375rem 0.75rem;
-  background-color: #f8f9fa;
-  width: 85%;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.shareable-link a {
-  min-width: 0;
-}
-</style>

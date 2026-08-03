@@ -22,7 +22,7 @@
           <div class="form-group col-md-3 col-sm-3 col-3">
             <label for="samp-refcode">Refcode</label>
             <div id="samp-refcode">
-              <FormattedRefcode :refcode="Refcode" :name="Name" :chemform="ChemForm" />
+              <FormattedRefcode :refcode="Refcode" />
             </div>
           </div>
           <div class="form-group col-md-3 col-sm-3 col-3 pb-3">
@@ -113,7 +113,6 @@ export default {
     item() {
       return this.$store.state.all_item_data[this.item_id];
     },
-    ChemForm: createComputedSetterForItemField("chemform"),
     Refcode: createComputedSetterForItemField("refcode"),
     ItemID: createComputedSetterForItemField("item_id"),
     SampleDescription: createComputedSetterForItemField("description"),
