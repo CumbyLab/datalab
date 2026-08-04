@@ -74,4 +74,4 @@ ENV PORT=5001
 
 CMD ["/bin/bash", "-c", "/opt/.venv/bin/python -m gunicorn -b 0.0.0.0:${PORT} -w ${WEB_CONCURRENCY} ${GUNICORN_CMD_ARGS} 'pydatalab.main:create_app()'"]
 
-HEALTHCHECK --interval=30s --timeout=30s --start-interval=15s --start-period=30s --retries=3 CMD curl --fail http://localhost:${PORT}/healthcheck/is_ready || exit 1
+HEALTHCHECK --interval=30s --timeout=30s --start-interval=15s --start-period=30s --retries=3 CMD sh -c 'ROOT="$(awk -F= "/^PYDATALAB_ROOT_PATH=/{print \$2}" /app/.env 2>/dev/null)"; ROOT="${ROOT:-/}"; ROOT="/${ROOT#/}"; ROOT="${ROOT%/}"; curl -fsS "http://localhost:${PORT}${ROOT}/healthcheck/is_ready" >/dev/null || curl -fsS "http://localhost:${PORT}/healthcheck/is_ready" >/dev/null || exit 1'
